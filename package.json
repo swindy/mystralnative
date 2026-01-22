@@ -1,0 +1,33 @@
+{
+  "name": "@mystral/native-runtime",
+  "version": "0.1.0",
+  "description": "Native runtime for Mystral Engine games - WebGPU + SDL3 + V8/JSC",
+  "scripts": {
+    "deps:download": "node scripts/download-deps.mjs",
+    "deps:download:wgpu": "node scripts/download-deps.mjs --only wgpu",
+    "deps:download:sdl3": "node scripts/download-deps.mjs --only sdl3",
+    "deps:download:dawn": "node scripts/download-deps.mjs --only dawn",
+    "deps:download:v8": "node scripts/download-deps.mjs --only v8",
+    "deps:download:swc": "node scripts/download-deps.mjs --only swc",
+    "deps:clean": "rm -rf third_party/*",
+    "configure": "cmake -B build -DCMAKE_BUILD_TYPE=Release",
+    "configure:debug": "cmake -B build -DCMAKE_BUILD_TYPE=Debug",
+    "build": "cmake --build build",
+    "build:release": "cmake --build build --config Release",
+    "clean": "rm -rf build",
+    "example:triangle": "./build/examples/triangle",
+    "bundle": "node scripts/bundle.mjs",
+    "prebundle": "bun scripts/prebundle.ts",
+    "bundle:examples": "bun scripts/bundle-examples.ts",
+    "package:macos": "node scripts/package-macos.mjs",
+    "package:windows": "node scripts/package-windows.mjs",
+    "package:linux": "node scripts/package-linux.mjs",
+    "test": "bun test tests/ci",
+    "test:gpu": "bun test tests/gpu",
+    "test:all": "bun test tests"
+  },
+  "devDependencies": {
+    "@anthropic-ai/sdk": "^0.24.0",
+    "@types/bun": "^1.1.0"
+  }
+}

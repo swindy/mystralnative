@@ -1,0 +1,1773 @@
+// examples/simple-mystral/math/Vector3.ts
+class Vector3 {
+  x;
+  y;
+  z;
+  constructor(x = 0, y = 0, z = 0) {
+    this.x = x;
+    this.y = y;
+    this.z = z;
+  }
+  static get zero() {
+    return new Vector3(0, 0, 0);
+  }
+  static get one() {
+    return new Vector3(1, 1, 1);
+  }
+  static get up() {
+    return new Vector3(0, 1, 0);
+  }
+  static get down() {
+    return new Vector3(0, -1, 0);
+  }
+  static get right() {
+    return new Vector3(1, 0, 0);
+  }
+  static get left() {
+    return new Vector3(-1, 0, 0);
+  }
+  static get forward() {
+    return new Vector3(0, 0, -1);
+  }
+  static get back() {
+    return new Vector3(0, 0, 1);
+  }
+  static min(a, b) {
+    return new Vector3(Math.min(a.x, b.x), Math.min(a.y, b.y), Math.min(a.z, b.z));
+  }
+  static max(a, b) {
+    return new Vector3(Math.max(a.x, b.x), Math.max(a.y, b.y), Math.max(a.z, b.z));
+  }
+  min(v) {
+    this.x = Math.min(this.x, v.x);
+    this.y = Math.min(this.y, v.y);
+    this.z = Math.min(this.z, v.z);
+    return this;
+  }
+  max(v) {
+    this.x = Math.max(this.x, v.x);
+    this.y = Math.max(this.y, v.y);
+    this.z = Math.max(this.z, v.z);
+    return this;
+  }
+  add(v) {
+    return new Vector3(this.x + v.x, this.y + v.y, this.z + v.z);
+  }
+  subtract(v) {
+    return new Vector3(this.x - v.x, this.y - v.y, this.z - v.z);
+  }
+  multiply(scalar) {
+    return new Vector3(this.x * scalar, this.y * scalar, this.z * scalar);
+  }
+  multiplyScalar(scalar) {
+    return this.multiply(scalar);
+  }
+  divide(scalar) {
+    if (scalar === 0) {
+      throw new Error("Cannot divide by zero");
+    }
+    return new Vector3(this.x / scalar, this.y / scalar, this.z / scalar);
+  }
+  magnitude() {
+    return Math.sqrt(this.x * this.x + this.y * this.y + this.z * this.z);
+  }
+  magnitudeSquared() {
+    return this.x * this.x + this.y * this.y + this.z * this.z;
+  }
+  normalize() {
+    const mag = this.magnitude();
+    if (mag === 0) {
+      return Vector3.zero;
+    }
+    return this.divide(mag);
+  }
+  dot(v) {
+    return this.x * v.x + this.y * v.y + this.z * v.z;
+  }
+  cross(v) {
+    return new Vector3(this.y * v.z - this.z * v.y, this.z * v.x - this.x * v.z, this.x * v.y - this.y * v.x);
+  }
+  distanceTo(v) {
+    return this.subtract(v).magnitude();
+  }
+  distanceToSquared(v) {
+    return this.subtract(v).magnitudeSquared();
+  }
+  clampMagnitude(maxMagnitude) {
+    const mag = this.magnitude();
+    if (mag > maxMagnitude) {
+      return this.normalize().multiply(maxMagnitude);
+    }
+    return this.clone();
+  }
+  lerp(v, t) {
+    return this.add(v.subtract(this).multiply(t));
+  }
+  slerp(v, t) {
+    const dot = this.dot(v);
+    const theta = Math.acos(Math.max(-1, Math.min(1, dot)));
+    const sinTheta = Math.sin(theta);
+    if (sinTheta === 0) {
+      return this.lerp(v, t);
+    }
+    const a = Math.sin((1 - t) * theta) / sinTheta;
+    const b = Math.sin(t * theta) / sinTheta;
+    return this.multiply(a).add(v.multiply(b));
+  }
+  reflect(normal) {
+    return this.subtract(normal.multiply(2 * this.dot(normal)));
+  }
+  projectOn(v) {
+    const vMagSq = v.magnitudeSquared();
+    if (vMagSq === 0) {
+      return Vector3.zero;
+    }
+    return v.multiply(this.dot(v) / vMagSq);
+  }
+  angleTo(v) {
+    const dotProduct = this.dot(v);
+    const magProduct = this.magnitude() * v.magnitude();
+    if (magProduct === 0) {
+      return 0;
+    }
+    return Math.acos(Math.max(-1, Math.min(1, dotProduct / magProduct)));
+  }
+  equals(v, epsilon = 0.000001) {
+    return Math.abs(this.x - v.x) < epsilon && Math.abs(this.y - v.y) < epsilon && Math.abs(this.z - v.z) < epsilon;
+  }
+  clone() {
+    return new Vector3(this.x, this.y, this.z);
+  }
+  copy(v) {
+    this.x = v.x;
+    this.y = v.y;
+    this.z = v.z;
+    return this;
+  }
+  set(x, y, z) {
+    this.x = x;
+    this.y = y;
+    this.z = z;
+    return this;
+  }
+  toString() {
+    return `Vector3(${this.x.toFixed(3)}, ${this.y.toFixed(3)}, ${this.z.toFixed(3)})`;
+  }
+  toArray() {
+    return [this.x, this.y, this.z];
+  }
+  static fromArray(array) {
+    return new Vector3(array[0], array[1], array[2]);
+  }
+  applyMatrix4(m) {
+    const x = this.x, y = this.y, z = this.z;
+    const e = m.elements;
+    const w = 1 / (e[3] * x + e[7] * y + e[11] * z + e[15]);
+    this.x = (e[0] * x + e[4] * y + e[8] * z + e[12]) * w;
+    this.y = (e[1] * x + e[5] * y + e[9] * z + e[13]) * w;
+    this.z = (e[2] * x + e[6] * y + e[10] * z + e[14]) * w;
+    return this;
+  }
+}
+// examples/simple-mystral/math/Matrix4.ts
+class Matrix4 {
+  elements;
+  constructor(elements) {
+    this.elements = new Float32Array(elements || [
+      1,
+      0,
+      0,
+      0,
+      0,
+      1,
+      0,
+      0,
+      0,
+      0,
+      1,
+      0,
+      0,
+      0,
+      0,
+      1
+    ]);
+  }
+  static get identity() {
+    return new Matrix4;
+  }
+  static zero() {
+    return new Matrix4([
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ]);
+  }
+  copy(m) {
+    this.elements.set(m.elements);
+    return this;
+  }
+  clone() {
+    return new Matrix4(Array.from(this.elements));
+  }
+  multiply(m) {
+    return this.multiplyMatrices(this, m);
+  }
+  multiplyMatrices(a, b) {
+    const ae = a.elements;
+    const be = b.elements;
+    const te = this.elements;
+    const a11 = ae[0], a12 = ae[4], a13 = ae[8], a14 = ae[12];
+    const a21 = ae[1], a22 = ae[5], a23 = ae[9], a24 = ae[13];
+    const a31 = ae[2], a32 = ae[6], a33 = ae[10], a34 = ae[14];
+    const a41 = ae[3], a42 = ae[7], a43 = ae[11], a44 = ae[15];
+    const b11 = be[0], b12 = be[4], b13 = be[8], b14 = be[12];
+    const b21 = be[1], b22 = be[5], b23 = be[9], b24 = be[13];
+    const b31 = be[2], b32 = be[6], b33 = be[10], b34 = be[14];
+    const b41 = be[3], b42 = be[7], b43 = be[11], b44 = be[15];
+    te[0] = a11 * b11 + a12 * b21 + a13 * b31 + a14 * b41;
+    te[4] = a11 * b12 + a12 * b22 + a13 * b32 + a14 * b42;
+    te[8] = a11 * b13 + a12 * b23 + a13 * b33 + a14 * b43;
+    te[12] = a11 * b14 + a12 * b24 + a13 * b34 + a14 * b44;
+    te[1] = a21 * b11 + a22 * b21 + a23 * b31 + a24 * b41;
+    te[5] = a21 * b12 + a22 * b22 + a23 * b32 + a24 * b42;
+    te[9] = a21 * b13 + a22 * b23 + a23 * b33 + a24 * b43;
+    te[13] = a21 * b14 + a22 * b24 + a23 * b34 + a24 * b44;
+    te[2] = a31 * b11 + a32 * b21 + a33 * b31 + a34 * b41;
+    te[6] = a31 * b12 + a32 * b22 + a33 * b32 + a34 * b42;
+    te[10] = a31 * b13 + a32 * b23 + a33 * b33 + a34 * b43;
+    te[14] = a31 * b14 + a32 * b24 + a33 * b34 + a34 * b44;
+    te[3] = a41 * b11 + a42 * b21 + a43 * b31 + a44 * b41;
+    te[7] = a41 * b12 + a42 * b22 + a43 * b32 + a44 * b42;
+    te[11] = a41 * b13 + a42 * b23 + a43 * b33 + a44 * b43;
+    te[15] = a41 * b14 + a42 * b24 + a43 * b34 + a44 * b44;
+    return this;
+  }
+  transpose() {
+    const te = this.elements;
+    let tmp;
+    tmp = te[1];
+    te[1] = te[4];
+    te[4] = tmp;
+    tmp = te[2];
+    te[2] = te[8];
+    te[8] = tmp;
+    tmp = te[3];
+    te[3] = te[12];
+    te[12] = tmp;
+    tmp = te[6];
+    te[6] = te[9];
+    te[9] = tmp;
+    tmp = te[7];
+    te[7] = te[13];
+    te[13] = tmp;
+    tmp = te[11];
+    te[11] = te[14];
+    te[14] = tmp;
+    return this;
+  }
+  determinant() {
+    const te = this.elements;
+    const n11 = te[0], n12 = te[4], n13 = te[8], n14 = te[12];
+    const n21 = te[1], n22 = te[5], n23 = te[9], n24 = te[13];
+    const n31 = te[2], n32 = te[6], n33 = te[10], n34 = te[14];
+    const n41 = te[3], n42 = te[7], n43 = te[11], n44 = te[15];
+    return n41 * (+n14 * n23 * n32 - n13 * n24 * n32 - n14 * n22 * n33 + n12 * n24 * n33 + n13 * n22 * n34 - n12 * n23 * n34) + n42 * (+n11 * n23 * n34 - n11 * n24 * n33 + n14 * n21 * n33 - n13 * n21 * n34 + n13 * n24 * n31 - n14 * n23 * n31) + n43 * (+n11 * n24 * n32 - n11 * n22 * n34 - n14 * n21 * n32 + n12 * n21 * n34 + n14 * n22 * n31 - n12 * n24 * n31) + n44 * (-n13 * n22 * n31 - n11 * n23 * n32 + n11 * n22 * n33 + n13 * n21 * n32 - n12 * n21 * n33 + n12 * n23 * n31);
+  }
+  inverse() {
+    const te = this.elements;
+    const n11 = te[0], n21 = te[1], n31 = te[2], n41 = te[3];
+    const n12 = te[4], n22 = te[5], n32 = te[6], n42 = te[7];
+    const n13 = te[8], n23 = te[9], n33 = te[10], n43 = te[11];
+    const n14 = te[12], n24 = te[13], n34 = te[14], n44 = te[15];
+    const t11 = n23 * n34 * n42 - n24 * n33 * n42 + n24 * n32 * n43 - n22 * n34 * n43 - n23 * n32 * n44 + n22 * n33 * n44;
+    const t12 = n14 * n33 * n42 - n13 * n34 * n42 - n14 * n32 * n43 + n12 * n34 * n43 + n13 * n32 * n44 - n12 * n33 * n44;
+    const t13 = n13 * n24 * n42 - n14 * n23 * n42 + n14 * n22 * n43 - n12 * n24 * n43 - n13 * n22 * n44 + n12 * n23 * n44;
+    const t14 = n14 * n23 * n32 - n13 * n24 * n32 - n14 * n22 * n33 + n12 * n24 * n33 + n13 * n22 * n34 - n12 * n23 * n34;
+    const det = n11 * t11 + n21 * t12 + n31 * t13 + n41 * t14;
+    if (Math.abs(det) < 0.0000000001) {
+      console.warn("Matrix4.inverse(): Can not invert matrix, determinant is too small:", det);
+      return this.identity();
+    }
+    const detInv = 1 / det;
+    const out = this.elements;
+    out[0] = t11 * detInv;
+    out[1] = (n24 * n33 * n41 - n23 * n34 * n41 - n24 * n31 * n43 + n21 * n34 * n43 + n23 * n31 * n44 - n21 * n33 * n44) * detInv;
+    out[2] = (n22 * n34 * n41 - n24 * n32 * n41 + n24 * n31 * n42 - n21 * n34 * n42 - n22 * n31 * n44 + n21 * n32 * n44) * detInv;
+    out[3] = (n23 * n32 * n41 - n22 * n33 * n41 - n23 * n31 * n42 + n21 * n33 * n42 + n22 * n31 * n43 - n21 * n32 * n43) * detInv;
+    out[4] = t12 * detInv;
+    out[5] = (n13 * n34 * n41 - n14 * n33 * n41 + n14 * n31 * n43 - n11 * n34 * n43 - n13 * n31 * n44 + n11 * n33 * n44) * detInv;
+    out[6] = (n14 * n32 * n41 - n12 * n34 * n41 - n14 * n31 * n42 + n11 * n34 * n42 + n12 * n31 * n44 - n11 * n32 * n44) * detInv;
+    out[7] = (n12 * n33 * n41 - n13 * n32 * n41 + n13 * n31 * n42 - n11 * n33 * n42 - n12 * n31 * n43 + n11 * n32 * n43) * detInv;
+    out[8] = t13 * detInv;
+    out[9] = (n14 * n23 * n41 - n13 * n24 * n41 - n14 * n21 * n43 + n11 * n24 * n43 + n13 * n21 * n44 - n11 * n23 * n44) * detInv;
+    out[10] = (n12 * n24 * n41 - n14 * n22 * n41 + n14 * n21 * n42 - n11 * n24 * n42 - n12 * n21 * n44 + n11 * n22 * n44) * detInv;
+    out[11] = (n13 * n22 * n41 - n12 * n23 * n41 - n13 * n21 * n42 + n11 * n23 * n42 + n12 * n21 * n43 - n11 * n22 * n43) * detInv;
+    out[12] = t14 * detInv;
+    out[13] = (n13 * n24 * n31 - n14 * n23 * n31 + n14 * n21 * n33 - n11 * n24 * n33 - n13 * n21 * n34 + n11 * n23 * n34) * detInv;
+    out[14] = (n14 * n22 * n31 - n12 * n24 * n31 - n14 * n21 * n32 + n11 * n24 * n32 + n12 * n21 * n34 - n11 * n22 * n34) * detInv;
+    out[15] = (n12 * n23 * n31 - n13 * n22 * n31 + n13 * n21 * n32 - n11 * n23 * n32 - n12 * n21 * n33 + n11 * n22 * n33) * detInv;
+    return this;
+  }
+  invert() {
+    return this.inverse();
+  }
+  identity() {
+    this.elements.set([
+      1,
+      0,
+      0,
+      0,
+      0,
+      1,
+      0,
+      0,
+      0,
+      0,
+      1,
+      0,
+      0,
+      0,
+      0,
+      1
+    ]);
+    return this;
+  }
+  makeTranslation(v) {
+    this.elements.set([
+      1,
+      0,
+      0,
+      0,
+      0,
+      1,
+      0,
+      0,
+      0,
+      0,
+      1,
+      0,
+      v.x,
+      v.y,
+      v.z,
+      1
+    ]);
+    return this;
+  }
+  makeRotationFromAxisAngle(axis, angle) {
+    const c = Math.cos(angle);
+    const s = Math.sin(angle);
+    const t = 1 - c;
+    const { x, y, z } = axis;
+    const tx = t * x, ty = t * y;
+    this.elements.set([
+      tx * x + c,
+      tx * y - s * z,
+      tx * z + s * y,
+      0,
+      tx * y + s * z,
+      ty * y + c,
+      ty * z - s * x,
+      0,
+      tx * z - s * y,
+      ty * z + s * x,
+      t * z * z + c,
+      0,
+      0,
+      0,
+      0,
+      1
+    ]);
+    return this;
+  }
+  makeRotationX(angle) {
+    const c = Math.cos(angle);
+    const s = Math.sin(angle);
+    this.elements.set([
+      1,
+      0,
+      0,
+      0,
+      0,
+      c,
+      -s,
+      0,
+      0,
+      s,
+      c,
+      0,
+      0,
+      0,
+      0,
+      1
+    ]);
+    return this;
+  }
+  makeRotationY(angle) {
+    const c = Math.cos(angle);
+    const s = Math.sin(angle);
+    this.elements.set([
+      c,
+      0,
+      s,
+      0,
+      0,
+      1,
+      0,
+      0,
+      -s,
+      0,
+      c,
+      0,
+      0,
+      0,
+      0,
+      1
+    ]);
+    return this;
+  }
+  makeRotationZ(angle) {
+    const c = Math.cos(angle);
+    const s = Math.sin(angle);
+    this.elements.set([
+      c,
+      -s,
+      0,
+      0,
+      s,
+      c,
+      0,
+      0,
+      0,
+      0,
+      1,
+      0,
+      0,
+      0,
+      0,
+      1
+    ]);
+    return this;
+  }
+  makeScale(v) {
+    this.elements.set([
+      v.x,
+      0,
+      0,
+      0,
+      0,
+      v.y,
+      0,
+      0,
+      0,
+      0,
+      v.z,
+      0,
+      0,
+      0,
+      0,
+      1
+    ]);
+    return this;
+  }
+  makePerspective(fov, aspect, near, far) {
+    const f = 1 / Math.tan(fov / 2);
+    this.elements.set([
+      f / aspect,
+      0,
+      0,
+      0,
+      0,
+      f,
+      0,
+      0,
+      0,
+      0,
+      far / (near - far),
+      -1,
+      0,
+      0,
+      far * near / (near - far),
+      0
+    ]);
+    return this;
+  }
+  makeOrthographic(left, right, top, bottom, near, far) {
+    const te = this.elements;
+    const w = 1 / (right - left);
+    const h = 1 / (top - bottom);
+    const p = 1 / (far - near);
+    te[0] = 2 * w;
+    te[1] = 0;
+    te[2] = 0;
+    te[3] = 0;
+    te[4] = 0;
+    te[5] = 2 * h;
+    te[6] = 0;
+    te[7] = 0;
+    te[8] = 0;
+    te[9] = 0;
+    te[10] = -p;
+    te[11] = 0;
+    te[12] = -(right + left) * w;
+    te[13] = -(top + bottom) * h;
+    te[14] = -near * p;
+    te[15] = 1;
+    return this;
+  }
+  lookAt(eye, target, up) {
+    const ze = eye.subtract(target).normalize();
+    let xe = up.cross(ze);
+    if (xe.magnitudeSquared() < 0.000001) {
+      if (Math.abs(up.z) < 0.999) {
+        xe = new Vector3(0, 0, 1).cross(ze);
+      } else {
+        xe = new Vector3(1, 0, 0).cross(ze);
+      }
+    }
+    xe = xe.normalize();
+    const ye = ze.cross(xe);
+    const te = this.elements;
+    te[0] = xe.x;
+    te[4] = xe.y;
+    te[8] = xe.z;
+    te[12] = -xe.dot(eye);
+    te[1] = ye.x;
+    te[5] = ye.y;
+    te[9] = ye.z;
+    te[13] = -ye.dot(eye);
+    te[2] = ze.x;
+    te[6] = ze.y;
+    te[10] = ze.z;
+    te[14] = -ze.dot(eye);
+    te[3] = 0;
+    te[7] = 0;
+    te[11] = 0;
+    te[15] = 1;
+    return this;
+  }
+  decompose() {
+    const te = this.elements;
+    const sx = Math.sqrt(te[0] * te[0] + te[1] * te[1] + te[2] * te[2]);
+    const sy = Math.sqrt(te[4] * te[4] + te[5] * te[5] + te[6] * te[6]);
+    const sz = Math.sqrt(te[8] * te[8] + te[9] * te[9] + te[10] * te[10]);
+    const scale = new Vector3(sx, sy, sz);
+    const position = new Vector3(te[12], te[13], te[14]);
+    const rotation = this.clone();
+    const invScaleX = 1 / sx;
+    const invScaleY = 1 / sy;
+    const invScaleZ = 1 / sz;
+    rotation.elements[0] *= invScaleX;
+    rotation.elements[1] *= invScaleX;
+    rotation.elements[2] *= invScaleX;
+    rotation.elements[4] *= invScaleY;
+    rotation.elements[5] *= invScaleY;
+    rotation.elements[6] *= invScaleY;
+    rotation.elements[8] *= invScaleZ;
+    rotation.elements[9] *= invScaleZ;
+    rotation.elements[10] *= invScaleZ;
+    return { position, rotation, scale };
+  }
+  compose(position, rotation, scale) {
+    const te = this.elements;
+    te[0] = rotation.elements[0] * scale.x;
+    te[1] = rotation.elements[1] * scale.x;
+    te[2] = rotation.elements[2] * scale.x;
+    te[3] = 0;
+    te[4] = rotation.elements[4] * scale.y;
+    te[5] = rotation.elements[5] * scale.y;
+    te[6] = rotation.elements[6] * scale.y;
+    te[7] = 0;
+    te[8] = rotation.elements[8] * scale.z;
+    te[9] = rotation.elements[9] * scale.z;
+    te[10] = rotation.elements[10] * scale.z;
+    te[11] = 0;
+    te[12] = position.x;
+    te[13] = position.y;
+    te[14] = position.z;
+    te[15] = 1;
+    return this;
+  }
+  equals(m, epsilon = 0.000001) {
+    const te = this.elements;
+    const me = m.elements;
+    for (let i = 0;i < 16; i++) {
+      if (Math.abs(te[i] - me[i]) > epsilon) {
+        return false;
+      }
+    }
+    return true;
+  }
+  toString() {
+    const te = this.elements;
+    return `Matrix4(
+  ${te[0].toFixed(3)}, ${te[4].toFixed(3)}, ${te[8].toFixed(3)}, ${te[12].toFixed(3)},
+  ${te[1].toFixed(3)}, ${te[5].toFixed(3)}, ${te[9].toFixed(3)}, ${te[13].toFixed(3)},
+  ${te[2].toFixed(3)}, ${te[6].toFixed(3)}, ${te[10].toFixed(3)}, ${te[14].toFixed(3)},
+  ${te[3].toFixed(3)}, ${te[7].toFixed(3)}, ${te[11].toFixed(3)}, ${te[15].toFixed(3)}
+)`;
+  }
+  transformVector(v) {
+    const te = this.elements;
+    const { x, y, z } = v;
+    return new Vector3(te[0] * x + te[4] * y + te[8] * z + te[12], te[1] * x + te[5] * y + te[9] * z + te[13], te[2] * x + te[6] * y + te[10] * z + te[14]);
+  }
+  transformDirection(v) {
+    const te = this.elements;
+    const { x, y, z } = v;
+    return new Vector3(te[0] * x + te[4] * y + te[8] * z, te[1] * x + te[5] * y + te[9] * z, te[2] * x + te[6] * y + te[10] * z);
+  }
+  toArray() {
+    return this.elements.slice();
+  }
+}
+// examples/simple-mystral/math/Quaternion.ts
+class Quaternion {
+  x;
+  y;
+  z;
+  w;
+  constructor(x = 0, y = 0, z = 0, w = 1) {
+    this.x = x;
+    this.y = y;
+    this.z = z;
+    this.w = w;
+  }
+  static get identity() {
+    return new Quaternion(0, 0, 0, 1);
+  }
+  copy(q) {
+    this.x = q.x;
+    this.y = q.y;
+    this.z = q.z;
+    this.w = q.w;
+    return this;
+  }
+  clone() {
+    return new Quaternion(this.x, this.y, this.z, this.w);
+  }
+  multiply(q) {
+    return this.multiplyQuaternions(this.clone(), q);
+  }
+  multiplyQuaternions(a, b) {
+    const { x: qax, y: qay, z: qaz, w: qaw } = a;
+    const { x: qbx, y: qby, z: qbz, w: qbw } = b;
+    this.x = qax * qbw + qaw * qbx + qay * qbz - qaz * qby;
+    this.y = qay * qbw + qaw * qby + qaz * qbx - qax * qbz;
+    this.z = qaz * qbw + qaw * qbz + qax * qby - qay * qbx;
+    this.w = qaw * qbw - qax * qbx - qay * qby - qaz * qbz;
+    return this;
+  }
+  slerp(qb, t) {
+    if (t === 0)
+      return this;
+    if (t === 1) {
+      this.x = qb.x;
+      this.y = qb.y;
+      this.z = qb.z;
+      this.w = qb.w;
+      return this;
+    }
+    const x = this.x, y = this.y, z = this.z, w = this.w;
+    let cosHalfTheta = w * qb.w + x * qb.x + y * qb.y + z * qb.z;
+    let { w: qbw, x: qbx, y: qby, z: qbz } = qb;
+    if (cosHalfTheta < 0) {
+      qbw = -qb.w;
+      qbx = -qb.x;
+      qby = -qb.y;
+      qbz = -qb.z;
+      cosHalfTheta = -cosHalfTheta;
+    }
+    if (cosHalfTheta >= 1) {
+      return this;
+    }
+    const sinHalfTheta = Math.sqrt(1 - cosHalfTheta * cosHalfTheta);
+    const halfTheta = Math.atan2(sinHalfTheta, cosHalfTheta);
+    const ratioA = Math.sin((1 - t) * halfTheta) / sinHalfTheta;
+    const ratioB = Math.sin(t * halfTheta) / sinHalfTheta;
+    this.x = x * ratioA + qbx * ratioB;
+    this.y = y * ratioA + qby * ratioB;
+    this.z = z * ratioA + qbz * ratioB;
+    this.w = w * ratioA + qbw * ratioB;
+    return this;
+  }
+  lerp(qb, t) {
+    return new Quaternion(this.x + (qb.x - this.x) * t, this.y + (qb.y - this.y) * t, this.z + (qb.z - this.z) * t, this.w + (qb.w - this.w) * t);
+  }
+  equals(q, epsilon = 0.000001) {
+    const directMatch = Math.abs(this.x - q.x) < epsilon && Math.abs(this.y - q.y) < epsilon && Math.abs(this.z - q.z) < epsilon && Math.abs(this.w - q.w) < epsilon;
+    const inverseMatch = Math.abs(this.x + q.x) < epsilon && Math.abs(this.y + q.y) < epsilon && Math.abs(this.z + q.z) < epsilon && Math.abs(this.w + q.w) < epsilon;
+    return directMatch || inverseMatch;
+  }
+  length() {
+    return Math.sqrt(this.x * this.x + this.y * this.y + this.z * this.z + this.w * this.w);
+  }
+  lengthSquared() {
+    return this.x * this.x + this.y * this.y + this.z * this.z + this.w * this.w;
+  }
+  normalize() {
+    let length = this.length();
+    if (length === 0) {
+      this.x = 0;
+      this.y = 0;
+      this.z = 0;
+      this.w = 1;
+    } else {
+      length = 1 / length;
+      this.x *= length;
+      this.y *= length;
+      this.z *= length;
+      this.w *= length;
+    }
+    return this;
+  }
+  inverse() {
+    return new Quaternion(-this.x, -this.y, -this.z, this.w).normalize();
+  }
+  conjugate() {
+    this.x = -this.x;
+    this.y = -this.y;
+    this.z = -this.z;
+    return this;
+  }
+  dot(v) {
+    return this.x * v.x + this.y * v.y + this.z * v.z + this.w * v.w;
+  }
+  setFromAxisAngle(axis, angle) {
+    const normAxis = axis.normalize();
+    const halfAngle = angle / 2;
+    const s = Math.sin(halfAngle);
+    this.x = normAxis.x * s;
+    this.y = normAxis.y * s;
+    this.z = normAxis.z * s;
+    this.w = Math.cos(halfAngle);
+    return this;
+  }
+  setFromEuler(xOrEuler, yOrOrder, z, order) {
+    let x, y, zVal, eulerOrder;
+    if (typeof xOrEuler === "object") {
+      x = xOrEuler.x;
+      y = xOrEuler.y;
+      zVal = xOrEuler.z;
+      eulerOrder = yOrOrder ?? "XYZ";
+    } else {
+      x = xOrEuler;
+      y = yOrOrder;
+      zVal = z;
+      eulerOrder = order ?? "XYZ";
+    }
+    const c1 = Math.cos(x / 2);
+    const c2 = Math.cos(y / 2);
+    const c3 = Math.cos(zVal / 2);
+    const s1 = Math.sin(x / 2);
+    const s2 = Math.sin(y / 2);
+    const s3 = Math.sin(zVal / 2);
+    switch (eulerOrder) {
+      case "XYZ":
+        this.x = s1 * c2 * c3 + c1 * s2 * s3;
+        this.y = c1 * s2 * c3 - s1 * c2 * s3;
+        this.z = c1 * c2 * s3 + s1 * s2 * c3;
+        this.w = c1 * c2 * c3 - s1 * s2 * s3;
+        break;
+      case "YXZ":
+        this.x = s1 * c2 * c3 + c1 * s2 * s3;
+        this.y = c1 * s2 * c3 - s1 * c2 * s3;
+        this.z = c1 * c2 * s3 - s1 * s2 * c3;
+        this.w = c1 * c2 * c3 + s1 * s2 * s3;
+        break;
+      case "ZXY":
+        this.x = s1 * c2 * c3 - c1 * s2 * s3;
+        this.y = c1 * s2 * c3 + s1 * c2 * s3;
+        this.z = c1 * c2 * s3 + s1 * s2 * c3;
+        this.w = c1 * c2 * c3 - s1 * s2 * s3;
+        break;
+      case "ZYX":
+        this.x = s1 * c2 * c3 - c1 * s2 * s3;
+        this.y = c1 * s2 * c3 + s1 * c2 * s3;
+        this.z = c1 * c2 * s3 - s1 * s2 * c3;
+        this.w = c1 * c2 * c3 + s1 * s2 * s3;
+        break;
+      case "YZX":
+        this.x = s1 * c2 * c3 + c1 * s2 * s3;
+        this.y = c1 * s2 * c3 + s1 * c2 * s3;
+        this.z = c1 * c2 * s3 - s1 * s2 * c3;
+        this.w = c1 * c2 * c3 - s1 * s2 * s3;
+        break;
+      case "XZY":
+        this.x = s1 * c2 * c3 - c1 * s2 * s3;
+        this.y = c1 * s2 * c3 - s1 * c2 * s3;
+        this.z = c1 * c2 * s3 + s1 * s2 * c3;
+        this.w = c1 * c2 * c3 + s1 * s2 * s3;
+        break;
+      default:
+        throw new Error(`Euler order ${eulerOrder} not supported`);
+    }
+    return this;
+  }
+  static fromAxisAngle(axis, angle) {
+    const normAxis = axis.normalize();
+    const halfAngle = angle / 2;
+    const s = Math.sin(halfAngle);
+    return new Quaternion(normAxis.x * s, normAxis.y * s, normAxis.z * s, Math.cos(halfAngle));
+  }
+  static fromEuler(euler, order = "XYZ") {
+    const x = euler.x;
+    const y = euler.y;
+    const z = euler.z;
+    const c1 = Math.cos(x / 2);
+    const c2 = Math.cos(y / 2);
+    const c3 = Math.cos(z / 2);
+    const s1 = Math.sin(x / 2);
+    const s2 = Math.sin(y / 2);
+    const s3 = Math.sin(z / 2);
+    let qx, qy, qz, qw;
+    switch (order) {
+      case "XYZ":
+        qx = s1 * c2 * c3 + c1 * s2 * s3;
+        qy = c1 * s2 * c3 - s1 * c2 * s3;
+        qz = c1 * c2 * s3 + s1 * s2 * c3;
+        qw = c1 * c2 * c3 - s1 * s2 * s3;
+        break;
+      case "YXZ":
+        qx = s1 * c2 * c3 + c1 * s2 * s3;
+        qy = c1 * s2 * c3 - s1 * c2 * s3;
+        qz = c1 * c2 * s3 - s1 * s2 * c3;
+        qw = c1 * c2 * c3 + s1 * s2 * s3;
+        break;
+      case "ZXY":
+        qx = s1 * c2 * c3 - c1 * s2 * s3;
+        qy = c1 * s2 * c3 + s1 * c2 * s3;
+        qz = c1 * c2 * s3 + s1 * s2 * c3;
+        qw = c1 * c2 * c3 - s1 * s2 * s3;
+        break;
+      case "ZYX":
+        qx = s1 * c2 * c3 - c1 * s2 * s3;
+        qy = c1 * s2 * c3 + s1 * c2 * s3;
+        qz = c1 * c2 * s3 - s1 * s2 * c3;
+        qw = c1 * c2 * c3 + s1 * s2 * s3;
+        break;
+      case "YZX":
+        qx = s1 * c2 * c3 + c1 * s2 * s3;
+        qy = c1 * s2 * c3 + s1 * c2 * s3;
+        qz = c1 * c2 * s3 - s1 * s2 * c3;
+        qw = c1 * c2 * c3 - s1 * s2 * s3;
+        break;
+      case "XZY":
+        qx = s1 * c2 * c3 - c1 * s2 * s3;
+        qy = c1 * s2 * c3 - s1 * c2 * s3;
+        qz = c1 * c2 * s3 + s1 * s2 * c3;
+        qw = c1 * c2 * c3 + s1 * s2 * s3;
+        break;
+      default:
+        throw new Error(`Euler order ${order} not supported`);
+    }
+    return new Quaternion(qx, qy, qz, qw);
+  }
+  static fromRotationMatrix(m) {
+    const te = m.elements;
+    const m11 = te[0], m12 = te[4], m13 = te[8];
+    const m21 = te[1], m22 = te[5], m23 = te[9];
+    const m31 = te[2], m32 = te[6], m33 = te[10];
+    const trace = m11 + m22 + m33;
+    let q;
+    if (trace > 0) {
+      const s = 0.5 / Math.sqrt(trace + 1);
+      q = new Quaternion((m32 - m23) * s, (m13 - m31) * s, (m21 - m12) * s, 0.25 / s);
+    } else if (m11 > m22 && m11 > m33) {
+      const s = 2 * Math.sqrt(1 + m11 - m22 - m33);
+      q = new Quaternion(0.25 * s, (m12 + m21) / s, (m13 + m31) / s, (m32 - m23) / s);
+    } else if (m22 > m33) {
+      const s = 2 * Math.sqrt(1 + m22 - m11 - m33);
+      q = new Quaternion((m12 + m21) / s, 0.25 * s, (m23 + m32) / s, (m13 - m31) / s);
+    } else {
+      const s = 2 * Math.sqrt(1 + m33 - m11 - m22);
+      q = new Quaternion((m13 + m31) / s, (m23 + m32) / s, 0.25 * s, (m21 - m12) / s);
+    }
+    return q.normalize();
+  }
+  toMatrix4() {
+    const te = new Matrix4().elements;
+    const x = this.x, y = this.y, z = this.z, w = this.w;
+    const x2 = x + x, y2 = y + y, z2 = z + z;
+    const xx = x * x2, xy = x * y2, xz = x * z2;
+    const yy = y * y2, yz = y * z2, zz = z * z2;
+    const wx = w * x2, wy = w * y2, wz = w * z2;
+    te[0] = 1 - (yy + zz);
+    te[4] = xy - wz;
+    te[8] = xz + wy;
+    te[12] = 0;
+    te[1] = xy + wz;
+    te[5] = 1 - (xx + zz);
+    te[9] = yz - wx;
+    te[13] = 0;
+    te[2] = xz - wy;
+    te[6] = yz + wx;
+    te[10] = 1 - (xx + yy);
+    te[14] = 0;
+    te[3] = 0;
+    te[7] = 0;
+    te[11] = 0;
+    te[15] = 1;
+    return new Matrix4(Array.from(te));
+  }
+  angleTo(q) {
+    return 2 * Math.acos(Math.abs(Math.max(-1, Math.min(1, this.dot(q)))));
+  }
+  rotateTowards(q, step) {
+    const angle = this.angleTo(q);
+    if (angle === 0)
+      return this;
+    const t = Math.min(1, step / angle);
+    return this.slerp(q, t);
+  }
+  invert() {
+    return this.conjugate().normalize();
+  }
+  toString() {
+    return `Quaternion(${this.x.toFixed(3)}, ${this.y.toFixed(3)}, ${this.z.toFixed(3)}, ${this.w.toFixed(3)})`;
+  }
+  toArray() {
+    return [this.x, this.y, this.z, this.w];
+  }
+  static fromArray(array) {
+    return new Quaternion(array[0], array[1], array[2], array[3]);
+  }
+  toEuler(order = "YXZ") {
+    const x = this.x, y = this.y, z = this.z, w = this.w;
+    const x2 = x * x, y2 = y * y, z2 = z * z, w2 = w * w;
+    let ex, ey, ez;
+    switch (order) {
+      case "XYZ": {
+        const sinp = 2 * (w * x - y * z);
+        if (Math.abs(sinp) >= 1) {
+          ex = Math.sign(sinp) * Math.PI / 2;
+        } else {
+          ex = Math.asin(sinp);
+        }
+        ey = Math.atan2(2 * (w * y + x * z), 1 - 2 * (x2 + y2));
+        ez = Math.atan2(2 * (w * z + x * y), 1 - 2 * (x2 + z2));
+        break;
+      }
+      case "YXZ": {
+        const sinp = 2 * (w * x - y * z);
+        if (Math.abs(sinp) >= 1) {
+          ex = Math.sign(sinp) * Math.PI / 2;
+        } else {
+          ex = Math.asin(sinp);
+        }
+        ey = Math.atan2(2 * (w * y + x * z), w2 - x2 - y2 + z2);
+        ez = Math.atan2(2 * (w * z + x * y), w2 - x2 + y2 - z2);
+        break;
+      }
+      default: {
+        const sinp = 2 * (w * x - y * z);
+        if (Math.abs(sinp) >= 1) {
+          ex = Math.sign(sinp) * Math.PI / 2;
+        } else {
+          ex = Math.asin(sinp);
+        }
+        ey = Math.atan2(2 * (w * y + x * z), w2 - x2 - y2 + z2);
+        ez = Math.atan2(2 * (w * z + x * y), w2 - x2 + y2 - z2);
+        break;
+      }
+    }
+    return new Vector3(ex, ey, ez);
+  }
+  toEulerDegrees(order = "YXZ") {
+    const euler = this.toEuler(order);
+    const rad2deg = 180 / Math.PI;
+    return new Vector3(euler.x * rad2deg, euler.y * rad2deg, euler.z * rad2deg);
+  }
+}
+// examples/simple-mystral/math/Transform.ts
+class Transform {
+  _position;
+  _rotation;
+  _scale;
+  _matrix;
+  _matrixDirty = true;
+  _parent = null;
+  _children = [];
+  _worldMatrix;
+  _worldMatrixDirty = true;
+  constructor(position = Vector3.zero, rotation = Quaternion.identity, scale = Vector3.one) {
+    this._position = position.clone();
+    this._rotation = rotation.clone();
+    this._scale = scale.clone();
+    this._matrix = Matrix4.identity;
+    this._worldMatrix = Matrix4.identity;
+  }
+  get position() {
+    return this._position;
+  }
+  set position(value) {
+    if (!this._position.equals(value)) {
+      this._position = value.clone();
+      this._markDirty();
+    }
+  }
+  get rotation() {
+    return this._rotation;
+  }
+  set rotation(value) {
+    if (!this._rotation.equals(value)) {
+      this._rotation = value.clone();
+      this._markDirty();
+    }
+  }
+  get scale() {
+    return this._scale;
+  }
+  set scale(value) {
+    if (!this._scale.equals(value)) {
+      this._scale = value.clone();
+      this._markDirty();
+    }
+  }
+  get matrix() {
+    if (this._matrixDirty) {
+      this._matrix = new Matrix4().compose(this._position, this._rotation.toMatrix4(), this._scale);
+      this._matrixDirty = false;
+    }
+    return this._matrix;
+  }
+  get worldMatrix() {
+    if (this._worldMatrixDirty) {
+      if (this._parent) {
+        this._worldMatrix = new Matrix4().multiplyMatrices(this._parent.worldMatrix, this.matrix);
+      } else {
+        this._worldMatrix = this.matrix.clone();
+      }
+      this._worldMatrixDirty = false;
+    }
+    return this._worldMatrix;
+  }
+  get parent() {
+    return this._parent;
+  }
+  get children() {
+    return this._children.slice();
+  }
+  set parent(parent) {
+    if (this._parent === parent)
+      return;
+    if (this._parent) {
+      const index = this._parent._children.indexOf(this);
+      if (index !== -1) {
+        this._parent._children.splice(index, 1);
+      }
+    }
+    this._parent = parent;
+    if (this._parent) {
+      this._parent._children.push(this);
+    }
+    this._markWorldMatrixDirty();
+  }
+  addChild(child) {
+    child.parent = this;
+  }
+  removeChild(child) {
+    if (child.parent === this) {
+      child.parent = null;
+    }
+  }
+  translate(translation, space = "local") {
+    if (space === "local") {
+      const rotationMatrix = this.rotation.toMatrix4();
+      this.position = this.position.add(rotationMatrix.transformDirection(translation));
+    } else {
+      this.position = this.position.add(translation);
+    }
+  }
+  rotate(axis, angle, space = "local") {
+    if (space === "local") {
+      const rotation = Quaternion.fromAxisAngle(axis.normalize(), angle);
+      this.rotation = this.rotation.multiply(rotation).normalize();
+    } else {
+      const worldRotation = Quaternion.fromAxisAngle(axis.normalize(), angle);
+      const currentWorldRotation = this.getWorldRotation();
+      const newWorldRotation = worldRotation.multiply(currentWorldRotation).normalize();
+      this.setWorldRotation(newWorldRotation);
+    }
+  }
+  lookAt(target, up = Vector3.up) {
+    const matrix = Matrix4.identity.lookAt(this.position, target, up);
+    const { rotation } = matrix.decompose();
+    this.rotation = Quaternion.fromRotationMatrix(rotation).invert();
+    this._markDirty();
+  }
+  setWorldPosition(position) {
+    if (this._parent) {
+      const parentWorldMatrixInverse = this._parent.worldMatrix.clone().inverse();
+      this.position = parentWorldMatrixInverse.transformVector(position);
+    } else {
+      this.position = position.clone();
+    }
+  }
+  setWorldRotation(rotation) {
+    if (this._parent) {
+      const parentRotation = this._parent.worldMatrix.decompose().rotation;
+      const parentQuaternion = Quaternion.fromRotationMatrix(parentRotation);
+      this.rotation = parentQuaternion.invert().multiply(rotation).normalize();
+    } else {
+      this.rotation = rotation.clone();
+    }
+    this._markDirty();
+  }
+  setWorldScale(scale) {
+    if (this._parent) {
+      const parentScale = this._parent.worldMatrix.decompose().scale;
+      this.scale = new Vector3(scale.x / parentScale.x, scale.y / parentScale.y, scale.z / parentScale.z);
+    } else {
+      this.scale = scale.clone();
+    }
+    this._markDirty();
+  }
+  getWorldPosition() {
+    const { position } = this.worldMatrix.decompose();
+    return position;
+  }
+  getWorldRotation() {
+    const { rotation } = this.worldMatrix.decompose();
+    return Quaternion.fromRotationMatrix(rotation);
+  }
+  getWorldScale() {
+    const { scale } = this.worldMatrix.decompose();
+    return scale;
+  }
+  getForwardVector() {
+    const rotationMatrix = this.rotation.toMatrix4();
+    return rotationMatrix.transformDirection(Vector3.forward).normalize();
+  }
+  getRightVector() {
+    const rotationMatrix = this.rotation.toMatrix4();
+    return rotationMatrix.transformDirection(Vector3.right).normalize();
+  }
+  getUpVector() {
+    const rotationMatrix = this.rotation.toMatrix4();
+    return rotationMatrix.transformDirection(Vector3.up).normalize();
+  }
+  transformPoint(point) {
+    return this.worldMatrix.transformVector(point);
+  }
+  transformDirection(direction) {
+    return this.worldMatrix.transformDirection(direction).normalize();
+  }
+  inverseTransformPoint(point) {
+    const worldPos = this.getWorldPosition();
+    const worldScale = this.getWorldScale();
+    const worldRot = this.getWorldRotation();
+    const translated = point.subtract(worldPos);
+    const inverseRot = worldRot.invert();
+    const rotated = inverseRot.toMatrix4().transformDirection(translated);
+    return new Vector3(rotated.x / worldScale.x, rotated.y / worldScale.y, rotated.z / worldScale.z);
+  }
+  inverseTransformDirection(direction) {
+    const worldMatrixInverse = this.worldMatrix.clone().inverse();
+    return worldMatrixInverse.transformDirection(direction).normalize();
+  }
+  copy(transform) {
+    this.position.copy(transform.position);
+    this.rotation.copy(transform.rotation);
+    this.scale.copy(transform.scale);
+    this._markDirty();
+    return this;
+  }
+  clone() {
+    return new Transform(this.position, this.rotation, this.scale);
+  }
+  equals(transform, epsilon = 0.000001) {
+    return this.position.equals(transform.position, epsilon) && this.rotation.equals(transform.rotation, epsilon) && this.scale.equals(transform.scale, epsilon);
+  }
+  reset() {
+    this.position.copy(Vector3.zero);
+    this.rotation.copy(Quaternion.identity);
+    this.scale.copy(Vector3.one);
+    this._markDirty();
+  }
+  _markDirty() {
+    this._matrixDirty = true;
+    this._markWorldMatrixDirty();
+  }
+  _markWorldMatrixDirty() {
+    this._worldMatrixDirty = true;
+    for (const child of this._children) {
+      child._markWorldMatrixDirty();
+    }
+  }
+  toString() {
+    return `Transform(
+  Position: ${this.position.toString()},
+  Rotation: ${this.rotation.toString()},
+  Scale: ${this.scale.toString()}
+)`;
+  }
+  toJSON() {
+    return {
+      position: this.position.toArray(),
+      rotation: this.rotation.toArray(),
+      scale: this.scale.toArray()
+    };
+  }
+  static fromJSON(json) {
+    return new Transform(Vector3.fromArray(json.position), Quaternion.fromArray(json.rotation), Vector3.fromArray(json.scale));
+  }
+}
+// examples/simple-mystral/core/Node.ts
+class Node {
+  transform;
+  name;
+  children = [];
+  parent = null;
+  visible = true;
+  renderOrder = 0;
+  _initState = "ready";
+  _needsUpdate = false;
+  get initState() {
+    return this._initState;
+  }
+  get needsInit() {
+    return this._initState === "pending";
+  }
+  get needsUpdate() {
+    return this._needsUpdate;
+  }
+  constructor(name = "Node") {
+    this.name = name;
+    this.transform = new Transform;
+  }
+  addChild(child) {
+    if (child.parent) {
+      child.parent.removeChild(child);
+    }
+    child.parent = this;
+    this.children.push(child);
+    this.transform.addChild(child.transform);
+  }
+  removeChild(child) {
+    const index = this.children.indexOf(child);
+    if (index !== -1) {
+      this.children.splice(index, 1);
+      child.parent = null;
+      this.transform.removeChild(child.transform);
+    }
+  }
+  traverse(callback) {
+    const result = callback(this);
+    if (result === false)
+      return;
+    for (const child of this.children) {
+      child.traverse(callback);
+    }
+  }
+}
+// examples/simple-mystral/core/Scene.ts
+class Scene extends Node {
+  backgroundColor = {
+    r: 0.1,
+    g: 0.1,
+    b: 0.15,
+    a: 1
+  };
+  lights = [];
+  constructor(name = "Scene") {
+    super(name);
+  }
+  addLight(light) {
+    this.lights.push(light);
+  }
+  removeLight(light) {
+    const index = this.lights.indexOf(light);
+    if (index !== -1) {
+      this.lights.splice(index, 1);
+    }
+  }
+}
+// examples/simple-mystral/core/Camera.ts
+class Camera extends Node {
+  fov;
+  aspect;
+  near;
+  far;
+  _projectionMatrix;
+  _viewMatrix;
+  constructor(fov = 60, aspect = 16 / 9, near = 0.1, far = 1000) {
+    super("Camera");
+    this.fov = fov;
+    this.aspect = aspect;
+    this.near = near;
+    this.far = far;
+    this._projectionMatrix = new Matrix4;
+    this._viewMatrix = new Matrix4;
+    this.updateProjectionMatrix();
+  }
+  get projectionMatrix() {
+    return this._projectionMatrix;
+  }
+  get viewMatrix() {
+    this.updateViewMatrix();
+    return this._viewMatrix;
+  }
+  updateProjectionMatrix() {
+    const fovRad = this.fov * Math.PI / 180;
+    const f = 1 / Math.tan(fovRad / 2);
+    const nf = 1 / (this.near - this.far);
+    this._projectionMatrix.elements.fill(0);
+    this._projectionMatrix.elements[0] = f / this.aspect;
+    this._projectionMatrix.elements[5] = f;
+    this._projectionMatrix.elements[10] = (this.far + this.near) * nf;
+    this._projectionMatrix.elements[11] = -1;
+    this._projectionMatrix.elements[14] = 2 * this.far * this.near * nf;
+  }
+  updateViewMatrix() {
+    const worldMatrix = this.transform.worldMatrix;
+    this._viewMatrix.copy(worldMatrix).invert();
+  }
+  lookAt(target) {
+    const position = this.transform.getWorldPosition();
+    const up = new Vector3(0, 1, 0);
+    const forward = target.clone().subtract(position).normalize();
+    const right = up.clone().cross(forward).normalize();
+    const newUp = forward.clone().cross(right);
+    const rotMatrix = new Matrix4;
+    rotMatrix.elements[0] = right.x;
+    rotMatrix.elements[1] = right.y;
+    rotMatrix.elements[2] = right.z;
+    rotMatrix.elements[4] = newUp.x;
+    rotMatrix.elements[5] = newUp.y;
+    rotMatrix.elements[6] = newUp.z;
+    rotMatrix.elements[8] = -forward.x;
+    rotMatrix.elements[9] = -forward.y;
+    rotMatrix.elements[10] = -forward.z;
+    rotMatrix.elements[15] = 1;
+    this.transform.rotation.setFromRotationMatrix(rotMatrix);
+  }
+}
+// examples/simple-mystral/core/Geometry.ts
+class Geometry {
+  positions = new Float32Array(0);
+  normals = new Float32Array(0);
+  uvs = new Float32Array(0);
+  colors = new Float32Array(0);
+  vertexCount = 0;
+  bounds = {
+    min: new Vector3(Infinity, Infinity, Infinity),
+    max: new Vector3(-Infinity, -Infinity, -Infinity)
+  };
+  constructor() {}
+  setPositions(data) {
+    this.positions = data;
+    this.vertexCount = data.length / 3;
+    this.computeBounds();
+  }
+  setNormals(data) {
+    this.normals = data;
+  }
+  setUVs(data) {
+    this.uvs = data;
+  }
+  setColors(data) {
+    this.colors = data;
+  }
+  computeBounds() {
+    this.bounds.min.set(Infinity, Infinity, Infinity);
+    this.bounds.max.set(-Infinity, -Infinity, -Infinity);
+    for (let i = 0;i < this.positions.length; i += 3) {
+      const x = this.positions[i];
+      const y = this.positions[i + 1];
+      const z = this.positions[i + 2];
+      this.bounds.min.x = Math.min(this.bounds.min.x, x);
+      this.bounds.min.y = Math.min(this.bounds.min.y, y);
+      this.bounds.min.z = Math.min(this.bounds.min.z, z);
+      this.bounds.max.x = Math.max(this.bounds.max.x, x);
+      this.bounds.max.y = Math.max(this.bounds.max.y, y);
+      this.bounds.max.z = Math.max(this.bounds.max.z, z);
+    }
+  }
+  getPackedVertexData() {
+    const floatsPerVertex = 12;
+    const data = new Float32Array(this.vertexCount * floatsPerVertex);
+    for (let i = 0;i < this.vertexCount; i++) {
+      const srcIdx = i * 3;
+      const dstIdx = i * floatsPerVertex;
+      data[dstIdx + 0] = this.positions[srcIdx + 0];
+      data[dstIdx + 1] = this.positions[srcIdx + 1];
+      data[dstIdx + 2] = this.positions[srcIdx + 2];
+      data[dstIdx + 3] = 0;
+      if (this.normals.length > 0) {
+        data[dstIdx + 4] = this.normals[srcIdx + 0];
+        data[dstIdx + 5] = this.normals[srcIdx + 1];
+        data[dstIdx + 6] = this.normals[srcIdx + 2];
+      }
+      data[dstIdx + 7] = 0;
+      if (this.colors.length > 0) {
+        data[dstIdx + 8] = this.colors[srcIdx + 0];
+        data[dstIdx + 9] = this.colors[srcIdx + 1];
+        data[dstIdx + 10] = this.colors[srcIdx + 2];
+      } else {
+        data[dstIdx + 8] = 1;
+        data[dstIdx + 9] = 1;
+        data[dstIdx + 10] = 1;
+      }
+      data[dstIdx + 11] = 0;
+    }
+    return data;
+  }
+}
+// examples/simple-mystral/core/Mesh.ts
+class Mesh extends Node {
+  geometry;
+  material;
+  constructor(geometry, material) {
+    super("Mesh");
+    this.geometry = geometry;
+    this.material = material || { color: new Vector3(1, 1, 1) };
+  }
+}
+// examples/simple-mystral/core/Engine.ts
+class Engine {
+  device;
+  context;
+  format;
+  pipeline;
+  uniformBuffer;
+  bindGroupLayout;
+  meshResources = new Map;
+  depthTexture;
+  constructor() {}
+  async init() {
+    if (!navigator.gpu) {
+      throw new Error("WebGPU not supported");
+    }
+    const adapter = await navigator.gpu.requestAdapter();
+    if (!adapter) {
+      throw new Error("No GPU adapter found");
+    }
+    this.device = await adapter.requestDevice();
+    console.log("Engine: Device acquired");
+    this.context = canvas.getContext("webgpu");
+    this.format = navigator.gpu.getPreferredCanvasFormat();
+    this.context.configure({
+      device: this.device,
+      format: this.format,
+      alphaMode: "opaque"
+    });
+    this.uniformBuffer = this.device.createBuffer({
+      size: 160,
+      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+    });
+    this.bindGroupLayout = this.device.createBindGroupLayout({
+      entries: [
+        {
+          binding: 0,
+          visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT,
+          buffer: { type: "uniform" }
+        },
+        {
+          binding: 1,
+          visibility: GPUShaderStage.VERTEX,
+          buffer: { type: "read-only-storage" }
+        }
+      ]
+    });
+    const shaderModule = this.device.createShaderModule({
+      code: this.getShaderCode()
+    });
+    const pipelineLayout = this.device.createPipelineLayout({
+      bindGroupLayouts: [this.bindGroupLayout]
+    });
+    this.pipeline = this.device.createRenderPipeline({
+      layout: pipelineLayout,
+      vertex: {
+        module: shaderModule,
+        entryPoint: "vertexMain"
+      },
+      fragment: {
+        module: shaderModule,
+        entryPoint: "fragmentMain",
+        targets: [{ format: this.format }]
+      },
+      primitive: {
+        topology: "triangle-list",
+        cullMode: "back"
+      },
+      depthStencil: {
+        format: "depth24plus",
+        depthWriteEnabled: true,
+        depthCompare: "less"
+      }
+    });
+    this.depthTexture = this.device.createTexture({
+      size: [canvas.width, canvas.height],
+      format: "depth24plus",
+      usage: GPUTextureUsage.RENDER_ATTACHMENT
+    });
+    console.log("Engine: Initialized");
+  }
+  getShaderCode() {
+    return `
+struct Uniforms {
+    mvp: mat4x4f,
+    model: mat4x4f,
+    materialColor: vec4f,
+    lightDir: vec4f,
+}
+
+struct Vertex {
+    position: vec3f,
+    normal: vec3f,
+    color: vec3f,
+}
+
+@group(0) @binding(0) var<uniform> uniforms: Uniforms;
+@group(0) @binding(1) var<storage, read> vertices: array<Vertex>;
+
+struct VertexOutput {
+    @builtin(position) position: vec4f,
+    @location(0) worldNormal: vec3f,
+    @location(1) color: vec3f,
+}
+
+@vertex
+fn vertexMain(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
+    let vertex = vertices[vertexIndex];
+
+    var output: VertexOutput;
+    output.position = uniforms.mvp * vec4f(vertex.position, 1.0);
+    output.worldNormal = (uniforms.model * vec4f(vertex.normal, 0.0)).xyz;
+    output.color = uniforms.materialColor.rgb;
+    return output;
+}
+
+@fragment
+fn fragmentMain(input: VertexOutput) -> @location(0) vec4f {
+    let lightDir = normalize(uniforms.lightDir.xyz);
+    let normal = normalize(input.worldNormal);
+
+    // Simple diffuse + ambient lighting
+    let diffuse = max(dot(normal, lightDir), 0.0);
+    let ambient = 0.3;
+    let lighting = ambient + diffuse * 0.7;
+
+    return vec4f(input.color * lighting, 1.0);
+}
+`;
+  }
+  getMeshResources(mesh) {
+    if (!this.meshResources.has(mesh)) {
+      const vertexData = mesh.geometry.getPackedVertexData();
+      const vertexBuffer = this.device.createBuffer({
+        size: vertexData.byteLength,
+        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
+      });
+      this.device.queue.writeBuffer(vertexBuffer, 0, vertexData, 0, vertexData.byteLength);
+      const bindGroup = this.device.createBindGroup({
+        layout: this.bindGroupLayout,
+        entries: [
+          { binding: 0, resource: { buffer: this.uniformBuffer } },
+          { binding: 1, resource: { buffer: vertexBuffer } }
+        ]
+      });
+      this.meshResources.set(mesh, { vertexBuffer, bindGroup });
+    }
+    return this.meshResources.get(mesh);
+  }
+  render(scene, camera) {
+    const commandEncoder = this.device.createCommandEncoder();
+    const renderPass = commandEncoder.beginRenderPass({
+      colorAttachments: [
+        {
+          view: this.context.getCurrentTexture().createView(),
+          loadOp: "clear",
+          storeOp: "store",
+          clearValue: scene.backgroundColor
+        }
+      ],
+      depthStencilAttachment: {
+        view: this.depthTexture.createView(),
+        depthLoadOp: "clear",
+        depthStoreOp: "store",
+        depthClearValue: 1
+      }
+    });
+    renderPass.setPipeline(this.pipeline);
+    const viewMatrix = camera.viewMatrix;
+    const projMatrix = camera.projectionMatrix;
+    const viewProj = new Matrix4().multiplyMatrices(projMatrix, viewMatrix);
+    let lightDir = { x: 0.5, y: 1, z: 0.3 };
+    if (scene.lights.length > 0 && scene.lights[0].direction) {
+      lightDir = scene.lights[0].direction;
+    }
+    scene.traverse((node) => {
+      if (!node.visible)
+        return false;
+      if (node instanceof Mesh) {
+        const mesh = node;
+        const resources = this.getMeshResources(mesh);
+        const modelMatrix = mesh.transform.worldMatrix;
+        const mvp = new Matrix4().multiplyMatrices(viewProj, modelMatrix);
+        const uniformData = new Float32Array(40);
+        uniformData.set(mvp.elements, 0);
+        uniformData.set(modelMatrix.elements, 16);
+        uniformData[32] = mesh.material.color.x;
+        uniformData[33] = mesh.material.color.y;
+        uniformData[34] = mesh.material.color.z;
+        uniformData[35] = 1;
+        uniformData[36] = lightDir.x;
+        uniformData[37] = lightDir.y;
+        uniformData[38] = lightDir.z;
+        uniformData[39] = 0;
+        this.device.queue.writeBuffer(this.uniformBuffer, 0, uniformData, 0, uniformData.byteLength);
+        renderPass.setBindGroup(0, resources.bindGroup);
+        renderPass.draw(mesh.geometry.vertexCount);
+      }
+      return true;
+    });
+    renderPass.end();
+    this.device.queue.submit([commandEncoder.finish()]);
+  }
+  run(callback) {
+    let lastTime = performance.now();
+    const loop = () => {
+      const now = performance.now();
+      const deltaTime = (now - lastTime) / 1000;
+      lastTime = now;
+      callback(deltaTime);
+      requestAnimationFrame(loop);
+    };
+    requestAnimationFrame(loop);
+  }
+}
+// examples/simple-mystral/geometries/BoxGeometry.ts
+class BoxGeometry extends Geometry {
+  constructor(width = 1, height = 1, depth = 1) {
+    super();
+    const w = width / 2;
+    const h = height / 2;
+    const d = depth / 2;
+    const faces = [
+      {
+        normal: [0, 0, 1],
+        vertices: [
+          [-w, -h, d],
+          [w, -h, d],
+          [w, h, d],
+          [-w, -h, d],
+          [w, h, d],
+          [-w, h, d]
+        ]
+      },
+      {
+        normal: [0, 0, -1],
+        vertices: [
+          [w, -h, -d],
+          [-w, -h, -d],
+          [-w, h, -d],
+          [w, -h, -d],
+          [-w, h, -d],
+          [w, h, -d]
+        ]
+      },
+      {
+        normal: [0, 1, 0],
+        vertices: [
+          [-w, h, d],
+          [w, h, d],
+          [w, h, -d],
+          [-w, h, d],
+          [w, h, -d],
+          [-w, h, -d]
+        ]
+      },
+      {
+        normal: [0, -1, 0],
+        vertices: [
+          [-w, -h, -d],
+          [w, -h, -d],
+          [w, -h, d],
+          [-w, -h, -d],
+          [w, -h, d],
+          [-w, -h, d]
+        ]
+      },
+      {
+        normal: [1, 0, 0],
+        vertices: [
+          [w, -h, d],
+          [w, -h, -d],
+          [w, h, -d],
+          [w, -h, d],
+          [w, h, -d],
+          [w, h, d]
+        ]
+      },
+      {
+        normal: [-1, 0, 0],
+        vertices: [
+          [-w, -h, -d],
+          [-w, -h, d],
+          [-w, h, d],
+          [-w, -h, -d],
+          [-w, h, d],
+          [-w, h, -d]
+        ]
+      }
+    ];
+    const positions = [];
+    const normals = [];
+    for (const face of faces) {
+      for (const vertex of face.vertices) {
+        positions.push(vertex[0], vertex[1], vertex[2]);
+        normals.push(face.normal[0], face.normal[1], face.normal[2]);
+      }
+    }
+    this.setPositions(new Float32Array(positions));
+    this.setNormals(new Float32Array(normals));
+  }
+}
+// examples/simple-mystral/main.ts
+async function main() {
+  console.log("Mystral Engine - Simple Cube Example");
+  const engine = new Engine;
+  await engine.init();
+  console.log("Engine initialized");
+  const scene = new Scene("MainScene");
+  scene.backgroundColor = { r: 0.05, g: 0.05, b: 0.1, a: 1 };
+  const light = {
+    type: "directional",
+    color: new Vector3(1, 1, 1),
+    intensity: 1,
+    direction: new Vector3(0.5, 1, 0.3)
+  };
+  scene.addLight(light);
+  console.log("Scene created with light");
+  const camera = new Camera(60, canvas.width / canvas.height, 0.1, 100);
+  camera.transform.position.set(0, 0, 5);
+  console.log("Camera created");
+  const cubeGeometry = new BoxGeometry(1.5, 1.5, 1.5);
+  const cube = new Mesh(cubeGeometry, {
+    color: new Vector3(0.2, 0.6, 1)
+  });
+  scene.addChild(cube);
+  console.log("Cube created and added to scene");
+  let time = 0;
+  engine.run((deltaTime) => {
+    time += deltaTime;
+    cube.transform.rotation.setFromEuler(time * 0.5, time * 0.7, time * 0.3);
+    engine.render(scene, camera);
+  });
+  console.log("Render loop started");
+}
+main().catch(console.error);
