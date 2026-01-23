@@ -250,14 +250,10 @@ if(MYSTRAL_USE_DAWN)
 
             if(EXISTS ${DAWN_LIB_PATH})
                 set(DAWN_LIBRARY ${DAWN_LIB_PATH})
-                # Dawn headers in Skia build are split across two locations:
-                # 1. build/include/third_party/externals/dawn/include/webgpu/webgpu.h (wrapper)
-                # 2. build/include/dawn/webgpu.h (actual definitions)
-                # The wrapper includes "dawn/webgpu.h", so we need both paths
-                set(DAWN_INCLUDE_DIR
-                    ${SKIA_TARGET_DIR}/build/include/third_party/externals/dawn/include
-                    ${SKIA_TARGET_DIR}/build/include
-                )
+                # Dawn headers are at build/include/dawn/*.h
+                # WebGPU wrapper headers are at build/include/webgpu/*.h (created by CI)
+                # Both are resolved from a single include path
+                set(DAWN_INCLUDE_DIR ${SKIA_TARGET_DIR}/build/include)
                 set(DAWN_FOUND ON)
                 message(STATUS "Found Dawn combined library from Skia build")
                 message(STATUS "Dawn includes: ${DAWN_INCLUDE_DIR}")

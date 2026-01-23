@@ -413,7 +413,7 @@ jobs:
         id: cache-deps
         with:
           path: third_party
-          key: deps-windows-x64-dawn-v12-${{ hashFiles('scripts/download-deps.mjs') }}
+          key: deps-windows-x64-dawn-v13-${{ hashFiles('scripts/download-deps.mjs') }}
 
       - name: Download base dependencies (excluding Skia/Dawn - use library-builder version)
         if: steps.cache-deps.outputs.cache-hit != 'true'
@@ -439,6 +439,34 @@ jobs:
           # Download Skia + Dawn from library-builder (includes dawn_combined.lib with D3D11/D3D12)
           # This build uses /MT static CRT and has full WebGPU implementation
           node scripts/download-deps.mjs --only skia-win-static
+
+      - name: Create WebGPU wrapper headers
+        if: steps.cache-deps.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          # library-builder Skia only has dawn/*.h headers, but code expects webgpu/*.h
+          # Create wrapper headers that include the dawn versions
+          INCLUDE_DIR="third_party/skia/build/include"
+          mkdir -p "$INCLUDE_DIR/webgpu"
+
+          # webgpu/webgpu.h -> dawn/webgpu.h
+          cat > "$INCLUDE_DIR/webgpu/webgpu.h" << 'HEADER'
+          #ifndef INCLUDE_WEBGPU_WEBGPU_H_
+          #define INCLUDE_WEBGPU_WEBGPU_H_
+          #include "dawn/webgpu.h"
+          #endif  // INCLUDE_WEBGPU_WEBGPU_H_
+          HEADER
+
+          # webgpu/webgpu_cpp.h -> dawn/webgpu_cpp.h
+          cat > "$INCLUDE_DIR/webgpu/webgpu_cpp.h" << 'HEADER'
+          #ifndef INCLUDE_WEBGPU_WEBGPU_CPP_H_
+          #define INCLUDE_WEBGPU_WEBGPU_CPP_H_
+          #include "dawn/webgpu_cpp.h"
+          #endif  // INCLUDE_WEBGPU_WEBGPU_CPP_H_
+          HEADER
+
+          echo "Created WebGPU wrapper headers in $INCLUDE_DIR/webgpu/"
+          ls -la "$INCLUDE_DIR/webgpu/"
 
       - name: Install vcpkg dependencies
         run: |
