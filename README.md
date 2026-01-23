@@ -8,18 +8,21 @@ Think of it as "Electron for games" but without Chromium - just your game code, 
 
 ### Option 1: Download Prebuilt Binary (Recommended)
 
-Download the latest release for your platform from the [releases page](https://github.com/mystralengine/mystralnative/releases/tag/v0.0.1):
+Download the latest release for your platform from the [releases page](https://github.com/mystralengine/mystralnative/releases):
 
 | Platform | Download |
 |----------|----------|
-| macOS (Apple Silicon) | `mystral-macOS-arm64-quickjs-wgpu.zip` |
-| macOS (Intel) | `mystral-macOS-x64-jsc-dawn.zip` |
-| Windows | `mystral-windows-x64-quickjs-dawn.zip` |
-| Linux | `mystral-linux-x64-quickjs-wgpu.zip` |
+| macOS (Apple Silicon) | `mystral-macOS-arm64-v8-dawn.zip` |
+| macOS (Intel) | `mystral-macOS-x64-v8-dawn.zip` |
+| Windows | `mystral-windows-x64-v8-dawn.zip` |
+| Linux | `mystral-linux-x64-v8-dawn.zip` |
+
+**Note:** Dawn builds are recommended for best compatibility with WebGPU shaders. V8 provides full ES2024+ support with JIT compilation.
 
 ```bash
 # Unzip and run
-unzip mystral-macOS-arm64-quickjs-wgpu.zip
+unzip mystral-macOS-arm64-v8-dawn.zip
+cd mystral-macOS-arm64-v8-dawn
 ./mystral run examples/triangle.js
 ```
 
@@ -76,19 +79,19 @@ window.addEventListener("gamepadconnected", (e) => {
 
 ```bash
 # Basic WebGPU triangle
-./build/mystral run examples/triangle.js
+./mystral run examples/triangle.js
 
 # 3D rotating cube
-./build/mystral run examples/simple-cube.js
+./mystral run examples/simple-cube.js
 
-# GLTF model loading
-./build/mystral run examples/gltf-test/main.ts
+# Full 3D scene with PBR lighting (Dawn builds only)
+./mystral run examples/mystral-helmet.js
 
 # Custom window size
-./build/mystral run examples/simple-cube.js --width 1920 --height 1080
+./mystral run examples/simple-cube.js --width 1920 --height 1080
 
 # Headless screenshot (for CI/testing)
-./build/mystral run examples/simple-cube.js --headless --screenshot output.png
+./mystral run examples/simple-cube.js --headless --screenshot output.png
 ```
 
 ### Example Files
@@ -223,8 +226,11 @@ All dependencies are downloaded automatically as prebuilt binaries:
 | wgpu-native / Dawn | WebGPU implementation |
 | SDL3 | Windowing, input, audio |
 | QuickJS / V8 / JSC | JavaScript engine |
+| Skia | Canvas 2D rendering |
 | libcurl | HTTP requests |
 | SWC | TypeScript transpiling |
+
+Prebuilt dependency binaries are managed via [mystralengine/library-builder](https://github.com/mystralengine/library-builder).
 
 ## Known Issues
 

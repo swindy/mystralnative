@@ -321,17 +321,12 @@ void AudioContext::audioCallback(float* output, int numFrames) {
 
 static int g_callbackCount = 0;
 
-void AudioContext::sdlAudioCallback(void* userdata, SDL_AudioStream* stream, int additionalAmount, int totalAmount) {
-    auto* ctx = static_cast<AudioContext*>(userdata);
+// Static buffer for audio callback to avoid allocation on audio thread
+static float s_audioBuffer[8192];  // ~93ms at 44.1kHz stereo
 
-    // Check if we're shutting down - return silence immediately
-    // Note: Don't do any I/O (cout) in callbacks - can cause hangs
-    if (ctx->shuttingDown_.load(std::memory_order_relaxed)) {
-        // Put silence to satisfy the callback
-        if (additionalAmount > 0) {
-            std::vector<float> silence(additionalAmount / sizeof(float), 0.0f);
-            SDL_PutAudioStreamData(stream, silence.data(), additionalAmount);
-        }
+void AudioContext::sdlAudioCallback(void* userdata, SDL_AudioStream* stream, int additionalAmount, int totalAmount) {
+    // Safety check: validate userdata pointer first
+    if (!userdata || !stream) {
         return;
     }
 
@@ -339,17 +334,33 @@ void AudioContext::sdlAudioCallback(void* userdata, SDL_AudioStream* stream, int
     // additionalAmount is the minimum bytes needed
     if (additionalAmount <= 0) return;
 
+    auto* ctx = static_cast<AudioContext*>(userdata);
+
+    // Check if we're shutting down - return silence immediately
+    // Note: Don't do any I/O (cout) in callbacks - can cause hangs
+    if (ctx->shuttingDown_.load(std::memory_order_relaxed)) {
+        // Put silence to satisfy the callback - use static buffer
+        std::memset(s_audioBuffer, 0, additionalAmount);
+        SDL_PutAudioStreamData(stream, s_audioBuffer, additionalAmount);
+        return;
+    }
+
     // Only log first few callbacks (no I/O in callback itself)
     g_callbackCount++;
 
     int numFrames = additionalAmount / (2 * sizeof(float));  // Stereo float
 
-    // Allocate temporary buffer
-    std::vector<float> buffer(numFrames * 2);
-    ctx->audioCallback(buffer.data(), numFrames);
+    // Safety: limit numFrames to static buffer size
+    if (numFrames <= 0 || numFrames > 4096) {
+        numFrames = std::min(numFrames, 4096);
+        if (numFrames <= 0) return;
+    }
+
+    // Use static buffer to avoid allocation
+    ctx->audioCallback(s_audioBuffer, numFrames);
 
     // Put audio data into the stream
-    SDL_PutAudioStreamData(stream, buffer.data(), numFrames * 2 * sizeof(float));
+    SDL_PutAudioStreamData(stream, s_audioBuffer, numFrames * 2 * sizeof(float));
 }
 
 // ============================================================================
