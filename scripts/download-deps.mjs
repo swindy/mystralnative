@@ -249,18 +249,18 @@ const DEPS = {
   },
   'skia-win-static': {
     // Static Skia + Dawn for Windows from mystralengine/library-builder
-    // This build uses /MT (static CRT) and includes dawn_combined.lib
+    // This build uses /MT (static CRT) and includes dawn_combined.lib with
+    // full D3D11/D3D12 WebGPU implementation (not just proc stubs)
     // Use this for Windows Dawn builds to avoid CRT mismatch with Skia
     // https://github.com/mystralengine/library-builder/releases
-    version: 'skia-win-static-1',
+    version: 'skia-win-dawn-v1',
     getUrl: () => {
       if (platformName !== 'windows') {
         console.warn('skia-win-static is only for Windows');
         return null;
       }
-      // Download from library-builder GitHub Actions artifacts
-      // This contains both skia.lib and dawn_combined.lib with /MT
-      return 'https://github.com/mystralengine/library-builder/releases/download/skia-win-static-1/skia-build-win-x64-static-gpu-release.zip';
+      // Download from library-builder - includes Skia + Dawn with D3D11/D3D12 backends
+      return 'https://github.com/mystralengine/library-builder/releases/download/skia-win-dawn-v1/skia-build-win-x64-static-gpu-release.zip';
     },
     extractTo: 'skia',  // Extract to same place as regular skia
   },
