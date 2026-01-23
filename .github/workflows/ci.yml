@@ -1,10 +1,14 @@
 name: CI
 
 on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
+  # Manual trigger only - we don't want CI running on every push during development
+  workflow_dispatch:
+    inputs:
+      skip_windows:
+        description: 'Skip Windows builds (faster iteration)'
+        required: false
+        type: boolean
+        default: false
 
 jobs:
   # =============================================================================
@@ -314,7 +318,7 @@ jobs:
         id: cache-deps
         with:
           path: third_party
-          key: deps-windows-x64-${{ matrix.webgpu }}-v9-${{ hashFiles('scripts/download-deps.mjs') }}
+          key: deps-windows-x64-${{ matrix.webgpu }}-v10-${{ hashFiles('scripts/download-deps.mjs') }}
 
       - name: Download base dependencies
         if: steps.cache-deps.outputs.cache-hit != 'true'
@@ -330,21 +334,18 @@ jobs:
           export PATH="/c/Program Files/7-Zip:$PATH"
           node scripts/download-deps.mjs --only v8
 
-      - name: Download Dawn (if needed)
+      - name: Download static Skia+Dawn for Windows Dawn builds
         if: matrix.webgpu == 'dawn' && steps.cache-deps.outputs.cache-hit != 'true'
         shell: bash
         run: |
           export PATH="/c/Program Files/7-Zip:$PATH"
-          node scripts/download-deps.mjs --only dawn
+          # Use skia-win-static which includes dawn_combined.lib with /MT (static CRT)
+          node scripts/download-deps.mjs --only skia-win-static --force
 
       - name: Install vcpkg dependencies
         run: |
-          # Use static triplet for wgpu (static CRT), dynamic for Dawn
-          if ("${{ matrix.webgpu }}" -eq "wgpu") {
-            vcpkg install curl:x64-windows-static zlib:x64-windows-static
-          } else {
-            vcpkg install curl:x64-windows zlib:x64-windows
-          }
+          # Use static triplet for all Windows builds (both wgpu and Dawn use /MT now)
+          vcpkg install curl:x64-windows-static zlib:x64-windows-static
           vcpkg integrate install
 
       - name: Configure CMake
@@ -358,15 +359,14 @@ jobs:
             $CMAKE_ARGS += "-DMYSTRAL_USE_QUICKJS=OFF", "-DMYSTRAL_USE_V8=ON", "-DMYSTRAL_USE_JSC=OFF"
           }
 
-          # WebGPU backend
+          # WebGPU backend - both use static CRT (/MT) on Windows
           if ("${{ matrix.webgpu }}" -eq "wgpu") {
             $CMAKE_ARGS += "-DMYSTRAL_USE_WGPU=ON", "-DMYSTRAL_USE_DAWN=OFF"
-            $CMAKE_ARGS += "-DVCPKG_TARGET_TRIPLET=x64-windows-static"
-            $CMAKE_ARGS += "-DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded"
           } elseif ("${{ matrix.webgpu }}" -eq "dawn") {
             $CMAKE_ARGS += "-DMYSTRAL_USE_WGPU=OFF", "-DMYSTRAL_USE_DAWN=ON"
           }
-
+          $CMAKE_ARGS += "-DVCPKG_TARGET_TRIPLET=x64-windows-static"
+          $CMAKE_ARGS += "-DCMAKE_MSVC_RUNTIME_LIBRARY=MultiThreaded"
           $CMAKE_ARGS += "-DCMAKE_TOOLCHAIN_FILE=$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake"
 
           Write-Host "Running: cmake $CMAKE_ARGS"
