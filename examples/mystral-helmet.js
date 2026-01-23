@@ -7999,7 +7999,6 @@ class GlobalResources {
       this._bindGroupsDirty = false;
     }
   }
-  _shadowsInitialized = false;
   constructor(device) {
     this.sceneUniforms = new SceneUniforms(device);
     this.objectBuffer = new ObjectBuffer(device);
@@ -8020,19 +8019,14 @@ class GlobalResources {
       size: 64,
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST
     });
+    const initialShadowLayers = Math.max(CASCADE_COUNT, activeShadowLayers);
+    console.log(`GlobalResources: Creating initial shadow atlas 2048x2048x${initialShadowLayers} (${(2048 * 2048 * initialShadowLayers * 4 / 1024 / 1024).toFixed(1)} MB)`);
     this.shadowAtlas = device.createTexture({
-      label: "Shadow Atlas Placeholder",
-      size: [1, 1, 1],
+      label: "Shadow Atlas (Array)",
+      size: [2048, 2048, initialShadowLayers],
       format: "depth32float",
       usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING
     });
-    this.pointShadowAtlas = device.createTexture({
-      label: "Point Shadow Atlas Placeholder",
-      size: [1, 1, 1],
-      format: "r32float",
-      usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING
-    });
-    this._shadowsInitialized = false;
     this.shadowSampler = device.createSampler({
       compare: "less",
       magFilter: "linear",
@@ -8048,57 +8042,40 @@ class GlobalResources {
       size: CASCADE_UNIFORMS_SIZE,
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
     });
+    console.log(`GlobalResources: Creating point shadow atlas 1024x1024x${MAX_SHADOW_LIGHTS * 6} (${(1024 * 1024 * MAX_SHADOW_LIGHTS * 6 * 4 / 1024 / 1024).toFixed(1)} MB)`);
+    this.pointShadowAtlas = device.createTexture({
+      label: "Point Shadow Atlas (Cube Array)",
+      size: [1024, 1024, MAX_SHADOW_LIGHTS * 6],
+      format: "r32float",
+      usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING
+    });
     this.pointShadowSampler = device.createSampler({
       label: "Point Shadow Sampler",
       magFilter: "nearest",
       minFilter: "nearest"
     });
   }
-  get shadowsInitialized() {
-    return this._shadowsInitialized;
-  }
   resize(width, height) {
     this.hiZBuffer.resize(width, height);
     this._bindGroupsDirty = true;
   }
-  resizeShadows(resolution, maxLights, device, pointShadowResolution, shadowsEnabled = true) {
-    if (!shadowsEnabled) {
-      return;
-    }
-    const pointRes = pointShadowResolution ?? 1024;
-    let needsBindGroupRecreate = false;
+  resizeShadows(resolution, maxLights, device) {
     const spotLightLayers = Math.max(0, Math.min(MAX_SHADOW_LIGHTS, maxLights));
     const layers = CASCADE_COUNT + spotLightLayers;
-    if (this.shadowAtlas && (this.shadowAtlas.width !== resolution || this.shadowAtlas.depthOrArrayLayers !== layers)) {
+    if (this.shadowAtlas && this.shadowAtlas.width === resolution && this.shadowAtlas.depthOrArrayLayers === layers) {
+      return;
+    }
+    if (this.shadowAtlas)
       this.shadowAtlas.destroy();
-      activeShadowLayers = layers;
-      const isFirstInit = !this._shadowsInitialized;
-      console.log(`GlobalResources: ${isFirstInit ? "Creating" : "Resizing"} shadow atlas to ${resolution}x${resolution}x${layers} (${(resolution * resolution * layers * 4 / 1024 / 1024).toFixed(1)} MB)`);
-      this.shadowAtlas = device.createTexture({
-        label: "Shadow Atlas (Array)",
-        size: [resolution, resolution, layers],
-        format: "depth32float",
-        usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING
-      });
-      needsBindGroupRecreate = true;
-    }
-    const pointLayers = MAX_SHADOW_LIGHTS * 6;
-    if (this.pointShadowAtlas && this.pointShadowAtlas.width !== pointRes) {
-      this.pointShadowAtlas.destroy();
-      const isFirstInit = !this._shadowsInitialized;
-      console.log(`GlobalResources: ${isFirstInit ? "Creating" : "Resizing"} point shadow atlas to ${pointRes}x${pointRes}x${pointLayers} (${(pointRes * pointRes * pointLayers * 4 / 1024 / 1024).toFixed(1)} MB)`);
-      this.pointShadowAtlas = device.createTexture({
-        label: "Point Shadow Atlas (Cube Array)",
-        size: [pointRes, pointRes, pointLayers],
-        format: "r32float",
-        usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING
-      });
-      needsBindGroupRecreate = true;
-    }
-    if (needsBindGroupRecreate) {
-      this._shadowsInitialized = true;
-      this.createBindGroup(device);
-    }
+    activeShadowLayers = layers;
+    console.log(`GlobalResources: Resizing shadow atlas to ${resolution}x${resolution}x${layers} (${(resolution * resolution * layers * 4 / 1024 / 1024).toFixed(1)} MB)`);
+    this.shadowAtlas = device.createTexture({
+      label: "Shadow Atlas (Array)",
+      size: [resolution, resolution, layers],
+      format: "depth32float",
+      usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING
+    });
+    this.createBindGroup(device);
   }
   getShadowAtlasLayers() {
     return this.shadowAtlas?.depthOrArrayLayers ?? activeShadowLayers;
@@ -9975,11 +9952,9 @@ class RenderGraph {
   execute(device, context) {
     if (!this.globalResources)
       return;
-    const shadowsEnabled = context.scene.shadows.enabled;
     const shadowRes = context.scene.shadows.resolution;
     const shadowLayers = context.scene.shadows.maxLights ?? 1;
-    const pointShadowRes = context.scene.shadows.pointShadowResolution;
-    this.globalResources.resizeShadows(shadowRes, shadowLayers, device, pointShadowRes, shadowsEnabled);
+    this.globalResources.resizeShadows(shadowRes, shadowLayers, device);
     this.globalResources.environmentMap = context.scene.environmentMap;
     this.globalResources.sceneUniforms.update(context.camera, context.scene);
     const meshes = [];
@@ -46872,9 +46847,6 @@ async function main() {
   console.log("Engine initialized");
   const scene = new Scene(engine);
   console.log("Scene created");
-  scene.shadows.resolution = 1024;
-  scene.shadows.pointShadowResolution = 512;
-  console.log("Shadow config:", JSON.stringify(scene.shadows));
   scene.postProcessing.bloom.enabled = false;
   scene.postProcessing.ssao.enabled = false;
   scene.postProcessing.fxaa.enabled = false;
