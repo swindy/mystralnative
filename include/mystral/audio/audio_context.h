@@ -7,6 +7,7 @@
 
 #pragma once
 
+#include <atomic>
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -215,6 +216,7 @@ private:
     // SDL audio
     uint32_t audioDevice_ = 0;
     SDL_AudioStream* audioStream_ = nullptr;
+    std::atomic<bool> shuttingDown_{false};
 };
 
 /**

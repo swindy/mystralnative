@@ -988,11 +988,21 @@ private:
         // Call the native function
         JSValueHandle result = (*fn)(isolate, args);
 
-        // Clean up argument handles (but skip protected ones)
+        // Set return value BEFORE cleaning up args (in case result is one of the args)
+        if (result.ptr) {
+            v8::Persistent<v8::Value>* resPersistent = (v8::Persistent<v8::Value>*)result.ptr;
+            info.GetReturnValue().Set(resPersistent->Get(isolate));
+        }
+
+        // Clean up argument handles (but skip protected ones and the result if it's an arg)
         for (auto& arg : args) {
             // Check if this handle was protected by the native function
             if (g_protectedHandles.find(arg.ptr) != g_protectedHandles.end()) {
                 // Skip - the native function wants to keep this handle
+                continue;
+            }
+            // Skip if this arg was returned (we already extracted its value above)
+            if (arg.ptr == result.ptr) {
                 continue;
             }
             v8::Persistent<v8::Value>* persistent = (v8::Persistent<v8::Value>*)arg.ptr;
@@ -1000,10 +1010,18 @@ private:
             delete persistent;
         }
 
-        // Set return value
-        if (result.ptr) {
+        // Clean up result handle if it wasn't one of the args
+        bool resultWasArg = false;
+        for (auto& arg : args) {
+            if (arg.ptr == result.ptr) {
+                resultWasArg = true;
+                break;
+            }
+        }
+        if (result.ptr && !resultWasArg && g_protectedHandles.find(result.ptr) == g_protectedHandles.end()) {
             v8::Persistent<v8::Value>* resPersistent = (v8::Persistent<v8::Value>*)result.ptr;
-            info.GetReturnValue().Set(resPersistent->Get(isolate));
+            resPersistent->Reset();
+            delete resPersistent;
         }
     }
 

@@ -402,6 +402,10 @@ public:
         std::cout << "[Mystral] Shutting down runtime..." << std::endl;
         running_ = false;
 
+        // Clean up audio resources FIRST before touching JS objects
+        // (Audio callback thread may be accessing JS handles)
+        audio::cleanupAudioBindings();
+
         // Unprotect all RAF callbacks before clearing
         if (jsEngine_) {
             for (auto& raf : rafCallbacks_) {

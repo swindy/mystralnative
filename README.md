@@ -77,11 +77,28 @@ The `mystral` CLI runs JavaScript files with full WebGPU support:
 | Example | Description |
 |---------|-------------|
 | `triangle.js` | Minimal WebGPU - renders an orange triangle |
+| `webgpu-triangle.js` | WebGPU triangle with inline shaders |
 | `simple-cube.js` | 3D rotating cube with perspective, matrices, colors |
 | `rotating-cube.js` | Cube using storage buffers (advanced) |
+| `simple-boxes.js` | Multiple 3D boxes demonstration |
 | `test-fetch.js` | Tests fetch API, setTimeout, setInterval |
-| `test-texture.js` | Tests texture loading (requires bind group fix) |
+| `test-texture.js` | Tests texture loading with WebGPU |
 | `test-http.js` | Tests HTTP fetch |
+| `test-audio.js` | Tests Web Audio API (440 Hz tone) |
+| `test-canvas2d.js` | Tests Canvas 2D API (Skia backend) |
+| `test-gamepad.js` | Tests Gamepad API |
+| `gamepad-3d.js` | 3D cube controlled by gamepad |
+| `test-ui.js` | Tests UI rendering system |
+| `gltf-test/` | GLTF model loading test |
+| `gltf-render/` | GLTF model rendering |
+| `textured-cube/` | Textured 3D cube |
+| `simple-mystral/` | Self-contained mini engine example |
+
+### Sample Assets
+
+Sample 3D models are included in `examples/assets/`:
+- `DamagedHelmet.glb` - Khronos sample model (3.6 MB)
+- `Sponza.glb` - Intel Sponza scene (13 MB)
 
 ### CLI Options
 
@@ -189,10 +206,12 @@ Dynamically linked:
 | Platform | JS Engine | WebGPU | Status |
 |----------|-----------|--------|--------|
 | macOS | QuickJS | wgpu-native | ✅ Working |
-| macOS | JSC | wgpu-native | 🚧 In Progress |
-| Windows | QuickJS/V8 | Dawn/wgpu | 📋 Planned |
-| Linux | QuickJS/V8 | wgpu-native | 📋 Planned |
-| iOS | JSC | wgpu-native | 📋 Planned |
+| macOS | V8 | wgpu-native | ✅ Working |
+| Windows | QuickJS | Dawn | ✅ Working |
+| Windows | V8 | Dawn | ✅ Working |
+| Linux | QuickJS/V8 | wgpu-native | ✅ Working |
+| iOS | JSC | wgpu-native | ✅ Working |
+| Android | QuickJS | wgpu-native | ✅ Working |
 
 ## Build Options
 
@@ -309,7 +328,15 @@ All dependencies are downloaded as prebuilt binaries:
 
 ## See Also
 
-- [tasks/mystralnativeruntime.md](../../tasks/mystralnativeruntime.md) - Full design document
 - [wgpu-native](https://github.com/gfx-rs/wgpu-native) - WebGPU C API
 - [SDL3](https://github.com/libsdl-org/SDL) - Cross-platform windowing
 - [QuickJS](https://bellard.org/quickjs/) - Tiny JS engine
+
+## Known Issues
+
+### macOS Audio Shutdown
+On macOS, the process may exit with code 137 when using Web Audio API. This is due to a known issue with SDL3's CoreAudio callback interaction. The audio functions correctly during runtime; only the shutdown is affected. Screenshot mode (`--screenshot`) exits cleanly with code 0.
+
+## License
+
+MIT License - see [LICENSE](LICENSE) for details.

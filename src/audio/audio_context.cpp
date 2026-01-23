@@ -273,13 +273,16 @@ void AudioContext::suspend() {
 void AudioContext::close() {
     if (state_ == State::Closed) return;
 
+    // Signal callback to stop processing first
+    shuttingDown_.store(true, std::memory_order_release);
+
     if (audioStream_) {
+        // Destroy the audio stream - SDL will wait for callbacks to finish
         SDL_DestroyAudioStream(audioStream_);
         audioStream_ = nullptr;
     }
 
     state_ = State::Closed;
-    std::cout << "[Audio] AudioContext closed" << std::endl;
 }
 
 void AudioContext::registerSource(AudioBufferSourceNode* source) {
@@ -321,14 +324,23 @@ static int g_callbackCount = 0;
 void AudioContext::sdlAudioCallback(void* userdata, SDL_AudioStream* stream, int additionalAmount, int totalAmount) {
     auto* ctx = static_cast<AudioContext*>(userdata);
 
+    // Check if we're shutting down - return silence immediately
+    // Note: Don't do any I/O (cout) in callbacks - can cause hangs
+    if (ctx->shuttingDown_.load(std::memory_order_relaxed)) {
+        // Put silence to satisfy the callback
+        if (additionalAmount > 0) {
+            std::vector<float> silence(additionalAmount / sizeof(float), 0.0f);
+            SDL_PutAudioStreamData(stream, silence.data(), additionalAmount);
+        }
+        return;
+    }
+
     // SDL3 callback: we need to provide audio data to the stream
     // additionalAmount is the minimum bytes needed
     if (additionalAmount <= 0) return;
 
+    // Only log first few callbacks (no I/O in callback itself)
     g_callbackCount++;
-    if (g_callbackCount <= 5 || g_callbackCount % 100 == 0) {
-        std::cout << "[Audio] Callback #" << g_callbackCount << " need=" << additionalAmount << " bytes, sources=" << ctx->activeSources_.size() << std::endl;
-    }
 
     int numFrames = additionalAmount / (2 * sizeof(float));  // Stereo float
 

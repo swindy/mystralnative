@@ -16,5 +16,10 @@ namespace audio {
  */
 void initializeAudioBindings(js::Engine* engine);
 
+/**
+ * Cleanup all audio resources (call before destroying JS engine)
+ */
+void cleanupAudioBindings();
+
 }  // namespace audio
 }  // namespace mystral

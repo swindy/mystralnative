@@ -354,5 +354,26 @@ void initializeAudioBindings(js::Engine* engine) {
     std::cout << "[Audio] Web Audio API bindings initialized" << std::endl;
 }
 
+void cleanupAudioBindings() {
+    // Note: On macOS, SDL3's audio stream destruction can hang during shutdown
+    // due to CoreAudio callbacks. For now, we leak the audio resources and let
+    // the OS clean them up on process exit. This is safe since we're shutting down.
+    //
+    // TODO: Investigate SDL3/CoreAudio interaction on macOS
+    // See: https://github.com/libsdl-org/SDL/issues
+
+    // Release audio contexts without destroying them (which calls SDL_DestroyAudioStream)
+    for (auto& pair : g_audioContexts) {
+        pair.second.release();  // Leak intentionally - OS will clean up on exit
+    }
+    g_audioContexts.clear();
+
+    // Source nodes and buffers don't have SDL resources, safe to destroy
+    g_sourceNodes.clear();
+    g_gainNodes.clear();
+    g_audioBuffers.clear();
+    g_jsEngine = nullptr;
+}
+
 }  // namespace audio
 }  // namespace mystral

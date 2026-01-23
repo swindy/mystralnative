@@ -29,11 +29,13 @@
 #include <regex>
 #include <queue>
 
-// Platform-specific headers for _exit()
+// Platform-specific headers for process termination
 #ifdef _WIN32
 #include <process.h>  // Windows: _exit()
+#include <windows.h>  // Windows: ExitProcess()
 #else
-#include <unistd.h>   // POSIX: _exit()
+#include <unistd.h>   // POSIX: _exit(), getpid()
+#include <signal.h>   // POSIX: kill(), SIGKILL
 #endif
 
 void printVersion() {
@@ -700,8 +702,27 @@ int runScript(const CLIOptions& opts) {
         if (!opts.quiet) {
             std::cout << "=== Script finished ===" << std::endl;
         }
+
+        // Note: On macOS, SDL3's audio callback threads can prevent graceful shutdown.
+        // The CoreAudio subsystem sometimes blocks even _exit(). SIGKILL is the only
+        // reliable way to terminate. This is safe because all user-visible state
+        // (files, screenshots) has already been written.
+        // TODO: File SDL3 issue about CoreAudio callback blocking process exit.
+#ifdef __APPLE__
+        // Give the audio callback a brief moment to notice shutdown
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        // SIGKILL is the only reliable termination on macOS with audio
+        kill(getpid(), SIGKILL);
+        // Unreachable, but suppresses compiler warning
         return 0;
+#elif !defined(_WIN32)
+        _exit(0);
+#else
+        ExitProcess(0);
+#endif
     }
+
+    return 0;
 }
 
 int main(int argc, char* argv[]) {

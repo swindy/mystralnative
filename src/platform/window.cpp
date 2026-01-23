@@ -122,8 +122,12 @@ void destroyWindow() {
         g_window.sdlWindow = nullptr;
     }
 
-    SDL_Quit();
-    std::cout << "[Window] SDL shutdown complete" << std::endl;
+    // Note: We skip SDL_Quit() because it hangs on macOS trying to close
+    // the audio subsystem (CoreAudio callback interaction issue).
+    // Instead, quit individual subsystems except audio.
+    // The OS will clean up resources on process exit.
+    SDL_QuitSubSystem(SDL_INIT_VIDEO);
+    std::cout << "[Window] SDL video shutdown complete" << std::endl;
 }
 
 /**
