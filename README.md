@@ -99,13 +99,11 @@ window.addEventListener("gamepadconnected", (e) => {
 | `simple-cube.js` | 3D cube with matrices |
 | `test-audio.js` | Web Audio API test |
 | `test-gamepad.js` | Gamepad API test |
-| `gltf-test/main.ts` | GLTF model loading |
-| `simple-mystral/` | Mini engine example |
 | `mystral-helmet.js` | Full Mystral Engine with DamagedHelmet model |
 
 Sample 3D models included in `examples/assets/`:
 - `DamagedHelmet.glb` - Khronos sample model
-- `Sponza.glb` - Intel Sponza scene
+- `environment.hdr` - HDR environment map for IBL lighting
 
 ## Bundling for Distribution
 

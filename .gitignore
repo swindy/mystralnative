@@ -42,3 +42,6 @@ gradle-app.setting
 .navigation/
 captures/
 output.json
+
+# Dependencies
+node_modules/
