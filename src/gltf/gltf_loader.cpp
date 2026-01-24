@@ -1,8 +1,27 @@
 /**
- * GLTF/GLB Loader Implementation
+ * GLTF/GLB Loader Implementation (DEPRECATED)
  *
- * Uses cgltf for parsing GLTF 2.0 files
+ * !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+ * THIS FILE IS DEPRECATED - DO NOT USE NATIVE C++ GLTF/GLB LOADING
+ * !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+ *
+ * MystralNative should use the JavaScript GLBLoader/GLTFLoader from the Mystral
+ * web engine (same code that runs in browsers). This ensures:
+ * - Feature parity with the web engine
+ * - Consistent behavior across platforms
+ * - Support for extensions like Draco compression (via WASM)
+ *
+ * The JS loaders are in src/loaders/GLBLoader.ts and src/loaders/GLTFLoader.ts
+ * of the main Mystral Engine repository.
+ *
+ * If you're seeing this error, remove gltf_loader.cpp and cgltf_impl.cpp from
+ * the build and use the JS-based loaders instead.
  */
+
+#error "DEPRECATED: Native GLTF/GLB loader is disabled. Use the JavaScript GLBLoader/GLTFLoader from the Mystral web engine instead. See comment above for details."
+
+// Original implementation below is commented out to prevent accidental use
+#if 0
 
 #include "mystral/gltf/gltf_loader.h"
 #include "cgltf.h"
@@ -473,3 +492,5 @@ std::unique_ptr<GLTFData> loadGLTFFromMemory(const uint8_t* buffer, size_t size,
 
 } // namespace gltf
 } // namespace mystral
+
+#endif // if 0 - end of deprecated code

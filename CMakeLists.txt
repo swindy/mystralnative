@@ -761,12 +761,14 @@ set(MYSTRAL_SOURCES
     src/platform/window.cpp
     src/platform/input.cpp
     src/utils/stb_impl.cpp
-    src/utils/cgltf_impl.cpp
+    # DEPRECATED: Native GLTF loading disabled - use JS GLBLoader/GLTFLoader instead
+    # src/utils/cgltf_impl.cpp
     src/http/http_client.cpp
     src/http/async_http_client.cpp
     src/fs/async_file.cpp
     src/fs/file_watcher.cpp
-    src/gltf/gltf_loader.cpp
+    # DEPRECATED: Native GLTF loading disabled - use JS GLBLoader/GLTFLoader instead
+    # src/gltf/gltf_loader.cpp
     src/audio/audio_context.cpp
     src/audio/audio_bindings.cpp
     src/vfs/embedded_bundle.cpp
