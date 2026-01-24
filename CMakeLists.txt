@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(MystralNativeRuntime VERSION 0.1.0 LANGUAGES C CXX)
+project(MystralNativeRuntime VERSION 0.0.2 LANGUAGES C CXX)
 
 # Windows: Use /MT (static CRT) for all builds
 # Both Skia and Dawn (from library-builder) are built with /MT static CRT.
@@ -786,6 +786,29 @@ target_include_directories(mystral-runtime PUBLIC
 target_include_directories(mystral-runtime PRIVATE
     ${THIRD_PARTY_DIR}/stb
     ${THIRD_PARTY_DIR}/cgltf
+)
+
+# Pass build configuration to source code
+# Determine JS engine name
+if(MYSTRAL_USE_V8)
+    set(MYSTRAL_JS_ENGINE_NAME "v8")
+elseif(MYSTRAL_USE_JSC)
+    set(MYSTRAL_JS_ENGINE_NAME "jsc")
+else()
+    set(MYSTRAL_JS_ENGINE_NAME "quickjs")
+endif()
+
+# Determine WebGPU backend name
+if(MYSTRAL_USE_DAWN)
+    set(MYSTRAL_WEBGPU_NAME "dawn")
+else()
+    set(MYSTRAL_WEBGPU_NAME "wgpu-native")
+endif()
+
+target_compile_definitions(mystral-runtime PUBLIC
+    MYSTRAL_VERSION="${PROJECT_VERSION}"
+    MYSTRAL_JS_ENGINE="${MYSTRAL_JS_ENGINE_NAME}"
+    MYSTRAL_WEBGPU_BACKEND="${MYSTRAL_WEBGPU_NAME}"
 )
 
 # Platform-specific sources

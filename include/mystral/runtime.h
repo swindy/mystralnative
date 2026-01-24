@@ -150,13 +150,30 @@ protected:
     Runtime() = default;
 };
 
-// Version info
-constexpr int VERSION_MAJOR = 0;
-constexpr int VERSION_MINOR = 1;
-constexpr int VERSION_PATCH = 0;
+// Version info - uses CMake-defined MYSTRAL_VERSION
+#ifndef MYSTRAL_VERSION
+#define MYSTRAL_VERSION "0.0.2"
+#endif
 
 inline const char* getVersion() {
-    return "0.1.0";
+    return MYSTRAL_VERSION;
+}
+
+// Build configuration - uses CMake-defined values
+#ifndef MYSTRAL_JS_ENGINE
+#define MYSTRAL_JS_ENGINE "quickjs"
+#endif
+
+#ifndef MYSTRAL_WEBGPU_BACKEND
+#define MYSTRAL_WEBGPU_BACKEND "wgpu-native"
+#endif
+
+inline const char* getJSEngine() {
+    return MYSTRAL_JS_ENGINE;
+}
+
+inline const char* getWebGPUBackend() {
+    return MYSTRAL_WEBGPU_BACKEND;
 }
 
 }  // namespace mystral

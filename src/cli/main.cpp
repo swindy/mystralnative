@@ -40,7 +40,7 @@
 
 void printVersion() {
     std::cout << "Mystral Native Runtime v" << mystral::getVersion() << std::endl;
-    std::cout << "WebGPU + QuickJS Game Engine Runtime" << std::endl;
+    std::cout << "Native WebGPU JS runtime - " << mystral::getWebGPUBackend() << " + " << mystral::getJSEngine() << " build" << std::endl;
 }
 
 void printHelp() {
