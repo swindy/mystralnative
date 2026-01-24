@@ -161,10 +161,10 @@ Options:
 └─────────────────────────────────────────────────────────────┘
         │                │           │        │
         ▼                ▼           ▼        ▼
-   ┌─────────┐    ┌───────────┐  ┌─────┐  ┌──────┐
-   │ QuickJS │    │ wgpu-native│  │SDL3 │  │libcurl│
-   │ V8/JSC  │    │ or Dawn   │  │     │  │      │
-   └─────────┘    └───────────┘  └─────┘  └──────┘
+   ┌─────────┐    ┌───────────┐  ┌─────┐  ┌──────┐  ┌───────┐
+   │ QuickJS │    │ wgpu-native│  │SDL3 │  │libcurl│  │ libuv │
+   │ V8/JSC  │    │ or Dawn   │  │     │  │      │  │       │
+   └─────────┘    └───────────┘  └─────┘  └──────┘  └───────┘
 ```
 
 ## Supported APIs
@@ -250,6 +250,7 @@ All dependencies are downloaded automatically as prebuilt binaries:
 | QuickJS / V8 / JSC | JavaScript engine |
 | Skia | Canvas 2D rendering |
 | libcurl | HTTP requests |
+| libuv | Async I/O, timers, file watching |
 | SWC | TypeScript transpiling |
 
 Prebuilt dependency binaries are managed via [mystralengine/library-builder](https://github.com/mystralengine/library-builder).
