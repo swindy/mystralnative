@@ -35,26 +35,33 @@ const model = await loadGLTFModel(device, './path/to/model.gltf');
 ```
 
 These loaders are implemented in:
-- `src/loaders/GLBLoader.ts` (main Mystral engine repo)
-- `src/loaders/GLTFLoader.ts` (main Mystral engine repo, uses loaders.gl)
+- `src/loaders/GLBLoader.ts` (main Mystral engine repo) - Supports both .glb and .gltf files
+- `src/loaders/GLTFLoader.ts` - **DEPRECATED** (uses loaders.gl, adds ~500KB to bundle)
+
+## Draco Compression Support
+
+GLBLoader now supports Draco-compressed meshes (`KHR_draco_mesh_compression`) via WebWorker-based WASM decoding.
+
+### Setup for Bundled Decoder (Recommended)
+
+Copy the Draco decoder files to your public folder:
+```bash
+mkdir -p public/draco
+curl -o public/draco/draco_decoder.js https://www.gstatic.com/draco/versioned/decoders/1.5.6/draco_decoder.js
+curl -o public/draco/draco_decoder.wasm https://www.gstatic.com/draco/versioned/decoders/1.5.6/draco_decoder.wasm
+```
+
+### Using CDN (No Setup Required)
+
+```javascript
+import { GLBLoader } from 'mystral';
+const loader = new GLBLoader(device, { dracoDecoderPath: 'cdn' });
+const result = await loader.load('./model.glb');
+```
 
 ## Known Limitations
 
-### Draco Compression Not Supported (Yet)
-
-The JS `GLBLoader` does not currently support Draco-compressed meshes (`KHR_draco_mesh_compression`). When loading Draco-compressed files:
-- Meshes will have 0 vertices
-- Accessors will be missing `bufferView` fields
-
-**Workaround**: Use uncompressed GLTF/GLB files. The Sponza model, for example, has both compressed and uncompressed versions.
-
-**Task**: "Support Draco compression" is on the roadmap.
-
-**Note on loaders.gl**: We intentionally avoid using loaders.gl for GLTF loading because:
-1. It's a large dependency that causes bundle bloat
-2. It uses DOM methods like `Image()` which aren't available in the native runtime
-
-The preferred approach is to implement Draco WASM decoding directly in our own GLBLoader.
+**loaders.gl removed**: We removed loaders.gl dependency to reduce bundle size by ~500KB. The GLBLoader now handles all GLTF/GLB loading natively.
 
 ## Build Configuration
 

@@ -38,6 +38,7 @@ async function bundleExample(example: { source: string; output: string }): Promi
       minify: false,
       sourcemap: "none",
       splitting: false,
+      treeshaking: true,
       define: {
         "process.env.NODE_ENV": '"production"',
       },
