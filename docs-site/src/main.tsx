@@ -2,6 +2,7 @@ import React, { Suspense, lazy } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import './styles.css';
+import 'highlight.js/styles/github-dark.css';
 
 const DocPage = lazy(() => import('./pages/DocPage'));
 const HomePage = lazy(() => import('./pages/HomePage'));
