@@ -3906,12 +3906,15 @@ void beginDawnFrame() {
 }
 
 void endDawnFrame() {
-    // Tick Dawn to process completed GPU work and free internal resources
-    // (staging buffers, command encoder state, etc.). Without this, Dawn's
-    // internal objects accumulate unboundedly since completion callbacks
-    // never fire.
+    // Tick the WebGPU device to process completed GPU work and free internal
+    // resources (staging buffers, command encoder state, etc.). Without this,
+    // internal objects accumulate unboundedly since completion callbacks never fire.
     if (g_device) {
+#if defined(MYSTRAL_WEBGPU_DAWN)
         wgpuDeviceTick(g_device);
+#elif defined(MYSTRAL_WEBGPU_WGPU)
+        wgpuDevicePoll(g_device, false, nullptr);
+#endif
     }
 }
 
