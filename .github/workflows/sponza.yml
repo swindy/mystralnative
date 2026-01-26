@@ -108,6 +108,11 @@ jobs:
           rm -f "$CERT_PATH"
           echo "Certificate imported successfully"
 
+      - name: Strip binary
+        run: |
+          strip build/mystral
+          echo "Stripped binary size: $(du -h build/mystral | awk '{print $1}')"
+
       - name: Create standalone bundle
         run: |
           ./build/mystral compile ${{ env.DEMO_ENTRY }} \
@@ -231,6 +236,11 @@ jobs:
 
       - name: Verify build
         run: ./build/mystral --version
+
+      - name: Strip binary
+        run: |
+          strip build/mystral
+          echo "Stripped binary size: $(du -h build/mystral | awk '{print $1}')"
 
       - name: Compile Sponza demo
         run: |
