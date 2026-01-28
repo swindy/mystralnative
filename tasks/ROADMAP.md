@@ -44,6 +44,9 @@ This document outlines the high-level goals for getting to a v1.0.0 release of M
 - [ ] **RetroArch / Emulators** — Verify WASM-based emulators work with WebGL backend.
 - [ ] **RPG Maker MV** — Verify simple games work (games that don't rely heavily on DOM or browser-specific APIs that Mystral Native won't support)
 
+### Additional JS Runtimes
+- [ ] Explore **Hermes / Static Hermes** as an additional JS runtime for iOS / Android
+
 ---
 
 ## v3.0.0 — MystralScript AOT Compiler
