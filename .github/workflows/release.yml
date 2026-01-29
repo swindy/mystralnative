@@ -123,6 +123,35 @@ jobs:
       - name: Test CLI
         run: ./build/mystral --version
 
+      - name: Verify macOS x64 deployment target
+        if: matrix.name == 'macOS-x64-jsc-dawn'
+        run: |
+          echo "Checking deployment target for Intel Mac build..."
+          # Check LC_BUILD_VERSION or LC_VERSION_MIN_MACOSX
+          otool -l ./build/mystral | grep -A4 "LC_BUILD_VERSION\|LC_VERSION_MIN_MACOSX" || true
+
+          # Extract and verify the minimum macOS version
+          MIN_VERSION=$(otool -l ./build/mystral | grep -A3 "LC_BUILD_VERSION" | grep "minos" | awk '{print $2}' || true)
+          if [ -z "$MIN_VERSION" ]; then
+            MIN_VERSION=$(otool -l ./build/mystral | grep -A2 "LC_VERSION_MIN_MACOSX" | grep "version" | awk '{print $2}' || true)
+          fi
+
+          echo "Detected minimum macOS version: $MIN_VERSION"
+
+          # Warn if deployment target is too high (> 13.x means older Intel Macs won't work)
+          if [ -n "$MIN_VERSION" ]; then
+            MAJOR=$(echo "$MIN_VERSION" | cut -d. -f1)
+            if [ "$MAJOR" -ge 14 ]; then
+              echo "::warning::Deployment target $MIN_VERSION may not support older Intel Macs (macOS 12/13)"
+            else
+              echo "✓ Deployment target $MIN_VERSION should support older Intel Macs"
+            fi
+          fi
+
+          # Also run a simple JS test to verify basic functionality
+          echo 'console.log("Intel Mac verification test passed");' > /tmp/test.js
+          ./build/mystral run /tmp/test.js --headless || echo "::warning::Headless test failed (may need GPU)"
+
       - name: Package artifacts
         run: |
           mkdir -p artifacts
