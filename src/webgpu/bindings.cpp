@@ -2908,13 +2908,18 @@ bool initBindings(js::Engine* engine, void* wgpuInstance, void* wgpuDevice, void
                                 // Check for buffer binding
                                 auto buffer = g_engine->getProperty(entry, "buffer");
                                 if (!g_engine->isUndefined(buffer)) {
-                                    std::string typeStr = g_engine->toString(g_engine->getProperty(buffer, "type"));
-                                    if (typeStr == "uniform") {
+                                    auto typeProp = g_engine->getProperty(buffer, "type");
+                                    std::string typeStr = g_engine->isUndefined(typeProp) ? "" : g_engine->toString(typeProp);
+                                    if (typeStr == "uniform" || typeStr == "") {
+                                        // Default to uniform if no type specified (Three.js uses empty {})
                                         layoutEntry.buffer.type = WGPUBufferBindingType_Uniform;
                                     } else if (typeStr == "storage") {
                                         layoutEntry.buffer.type = WGPUBufferBindingType_Storage;
                                     } else if (typeStr == "read-only-storage") {
                                         layoutEntry.buffer.type = WGPUBufferBindingType_ReadOnlyStorage;
+                                    } else {
+                                        // Default to uniform for unknown types
+                                        layoutEntry.buffer.type = WGPUBufferBindingType_Uniform;
                                     }
                                 }
 
@@ -2937,8 +2942,10 @@ bool initBindings(js::Engine* engine, void* wgpuInstance, void* wgpuDevice, void
                                 // Check for texture binding
                                 auto texture = g_engine->getProperty(entry, "texture");
                                 if (!g_engine->isUndefined(texture)) {
-                                    std::string sampleType = g_engine->toString(g_engine->getProperty(texture, "sampleType"));
-                                    if (sampleType == "float") {
+                                    auto sampleTypeProp = g_engine->getProperty(texture, "sampleType");
+                                    std::string sampleType = g_engine->isUndefined(sampleTypeProp) ? "" : g_engine->toString(sampleTypeProp);
+                                    if (sampleType == "float" || sampleType == "") {
+                                        // Default to float if no type specified (Three.js uses empty {})
                                         layoutEntry.texture.sampleType = WGPUTextureSampleType_Float;
                                     } else if (sampleType == "unfilterable-float") {
                                         layoutEntry.texture.sampleType = WGPUTextureSampleType_UnfilterableFloat;
@@ -2949,7 +2956,7 @@ bool initBindings(js::Engine* engine, void* wgpuInstance, void* wgpuDevice, void
                                     } else if (sampleType == "uint") {
                                         layoutEntry.texture.sampleType = WGPUTextureSampleType_Uint;
                                     } else {
-                                        // Default to float
+                                        // Default to float for unknown types
                                         layoutEntry.texture.sampleType = WGPUTextureSampleType_Float;
                                     }
 
@@ -3272,6 +3279,46 @@ bool initBindings(js::Engine* engine, void* wgpuInstance, void* wgpuDevice, void
                         })
                     );
 
+                    // device.pushErrorScope(filter) - Push an error scope for validation/OOM/internal errors
+                    // Used by Three.js for error handling during pipeline creation
+                    g_engine->setProperty(device, "pushErrorScope",
+                        g_engine->newFunction("pushErrorScope", [](void* ctx, const std::vector<js::JSValueHandle>& args) {
+                            // In native runtime, we can use Dawn's error scope API
+                            // For now, just no-op since Dawn reports errors to the error callback
+                            if (g_verboseLogging) {
+                                std::string filter = args.empty() ? "validation" : g_engine->toString(args[0]);
+                                std::cout << "[WebGPU] pushErrorScope: " << filter << std::endl;
+                            }
+                            return g_engine->newUndefined();
+                        })
+                    );
+
+                    // device.popErrorScope() - Pop an error scope and return Promise<GPUError | null>
+                    // Returns Promise<GPUError | null>
+                    g_engine->setProperty(device, "popErrorScope",
+                        g_engine->newFunction("popErrorScope", [](void* ctx, const std::vector<js::JSValueHandle>& args) {
+                            // Return a Promise that resolves to null (no error)
+                            // In a full implementation, this would check for actual errors
+                            if (g_verboseLogging) {
+                                std::cout << "[WebGPU] popErrorScope" << std::endl;
+                            }
+                            // Use evalScriptWithResult (not evalWithResult) to get the actual Promise value
+                            // evalWithResult uses module mode which returns module evaluation result, not expression value
+                            return g_engine->evalScriptWithResult("Promise.resolve(null)", "popErrorScope");
+                        })
+                    );
+
+                    // device.lost - Promise that resolves when the device is lost
+                    // Required by Three.js WebGPU renderer during init
+                    // We create a Promise that never resolves (device never lost in normal operation)
+                    auto deviceLostPromise = g_engine->evalWithResult(
+                        "new Promise(function(resolve) { globalThis.__mystral_device_lost_resolve = resolve; })",
+                        "device.lost"
+                    );
+                    g_engine->setProperty(device, "lost", deviceLostPromise);
+
+                    // Return the device directly
+                    // await on a non-Promise just returns the value
                     return device;
                 })
             );
@@ -3313,6 +3360,10 @@ bool initBindings(js::Engine* engine, void* wgpuInstance, void* wgpuDevice, void
             g_engine->setProperty(limits, "maxDynamicUniformBuffersPerPipelineLayout", g_engine->newNumber(8));
             g_engine->setProperty(adapter, "limits", limits);
 
+            // Return the adapter directly
+            // await on a non-Promise just returns the value
+            // Three.js: const adapter = await navigator.gpu.requestAdapter()
+            // This works whether we return a Promise or the adapter directly
             return adapter;
         })
     );

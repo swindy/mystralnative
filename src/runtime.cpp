@@ -2964,6 +2964,10 @@ globalThis.__mystralNativeDecodeDracoAsync = function(buffer, attrs) {
         auto window = jsEngine_->getGlobal();
         jsEngine_->setGlobalProperty("window", window);
 
+        // Set 'self' to point to global object (required by Three.js and other libs)
+        // In browsers, 'self' refers to the global object (same as 'this' at global scope)
+        jsEngine_->setGlobalProperty("self", window);
+
         // Also set document as window.document (browsers have both)
         jsEngine_->setProperty(window, "document", document);
 

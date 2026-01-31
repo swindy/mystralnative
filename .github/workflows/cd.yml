@@ -179,6 +179,7 @@ jobs:
           cp examples/test-audio.js artifacts/examples/
           cp examples/test-gamepad.js artifacts/examples/
           cp examples/mystral-helmet.js artifacts/examples/ || true
+          cp examples/threejs-cube-src.js artifacts/examples/ || true
           cp examples/assets/DamagedHelmet.glb artifacts/examples/assets/ || true
           cp examples/assets/environment.hdr artifacts/examples/assets/ || true
           cd artifacts && zip -r ../mystral-${{ matrix.name }}.zip .
@@ -402,6 +403,7 @@ jobs:
           cp examples/test-audio.js artifacts/examples/
           cp examples/test-gamepad.js artifacts/examples/
           cp examples/mystral-helmet.js artifacts/examples/ || true
+          cp examples/threejs-cube-src.js artifacts/examples/ || true
           cp examples/assets/DamagedHelmet.glb artifacts/examples/assets/ || true
           cp examples/assets/environment.hdr artifacts/examples/assets/ || true
           cd artifacts && 7z a ../mystral-${{ matrix.name }}.zip .
@@ -538,6 +540,7 @@ jobs:
           cp examples/test-audio.js artifacts/examples/
           cp examples/test-gamepad.js artifacts/examples/
           cp examples/mystral-helmet.js artifacts/examples/ || true
+          cp examples/threejs-cube-src.js artifacts/examples/ || true
           cp examples/assets/DamagedHelmet.glb artifacts/examples/assets/ || true
           cp examples/assets/environment.hdr artifacts/examples/assets/ || true
           cd artifacts && 7z a ../mystral-${{ matrix.name }}.zip .
