@@ -1080,17 +1080,20 @@ else()
 endif()
 
 # libwebp linkage (optional - for WebP texture support and video recording)
-# Note: Link order matters! webpmux depends on webp, webp depends on sharpyuv
+# Note: Link order matters on Linux! The GNU linker processes libraries left-to-right.
+# Libraries that USE symbols must come BEFORE libraries that PROVIDE those symbols.
+# Dependency chain: webpmux -> webp -> sharpyuv
+# So the correct order is: webpmux, webp, sharpyuv (reverse of dependency direction)
 if(TARGET webp::webp)
-    # Link sharpyuv first (dependency for webp encoding)
-    if(TARGET webp::sharpyuv)
-        target_link_libraries(mystral-runtime PRIVATE webp::sharpyuv)
-    endif()
-    # Link webp core
-    target_link_libraries(mystral-runtime PRIVATE webp::webp)
-    # Link webpmux for animated WebP video recording
+    # Link webpmux first (depends on webp)
     if(TARGET webp::mux)
         target_link_libraries(mystral-runtime PRIVATE webp::mux)
+    endif()
+    # Link webp core (depends on sharpyuv)
+    target_link_libraries(mystral-runtime PRIVATE webp::webp)
+    # Link sharpyuv last (provides SharpYuv* symbols used by webp)
+    if(TARGET webp::sharpyuv)
+        target_link_libraries(mystral-runtime PRIVATE webp::sharpyuv)
     endif()
 endif()
 
