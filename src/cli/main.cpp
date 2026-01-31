@@ -14,6 +14,7 @@
 #include "mystral/vfs/embedded_bundle.h"
 #include "mystral/js/module_resolver.h"
 #include "mystral/js/ts_transpiler.h"
+#include "mystral/debug/debug_server.h"
 #include <iostream>
 #include <fstream>
 #include <sstream>
@@ -79,6 +80,10 @@ VIDEO RECORDING OPTIONS:
     --video-fps <n>       Video framerate (default: 60)
     --video-quality <n>   WebP quality 0-100 (default: 80, higher = better)
     --mp4                 Convert to MP4 via FFmpeg (auto-detected if --video ends in .mp4)
+
+DEBUG/TESTING OPTIONS:
+    --debug-port <port>   Enable debug server on specified port (e.g., 9222)
+                          Allows remote testing via WebSocket protocol
 
 COMPILE OPTIONS:
     --include <dir>       Asset directory to bundle (repeatable)
@@ -175,6 +180,9 @@ struct CLIOptions {
     std::string outputPath;
     std::string rootDir;
     bool bundleOnly = false;  // Create standalone .bundle file (no exe copy)
+
+    // Debug server
+    int debugPort = 0;  // Port for debug server (0 = disabled)
 };
 
 CLIOptions parseArgs(int argc, char* argv[]) {
@@ -234,6 +242,8 @@ CLIOptions parseArgs(int argc, char* argv[]) {
             opts.videoQuality = std::stoi(argv[++i]);
         } else if (arg == "--mp4") {
             opts.convertToMp4 = true;
+        } else if (arg == "--debug-port" && i + 1 < argc) {
+            opts.debugPort = std::stoi(argv[++i]);
         } else if ((arg == "run") && opts.command.empty()) {
             opts.command = "run";
         } else if ((arg == "compile" || arg == "--compile") && opts.command.empty()) {
@@ -1026,6 +1036,9 @@ int runScript(const CLIOptions& opts) {
         if (opts.watch) {
             std::cout << "Watch mode: enabled (hot reload on file changes)" << std::endl;
         }
+        if (opts.debugPort > 0) {
+            std::cout << "Debug server: port " << opts.debugPort << std::endl;
+        }
         std::cout << std::endl;
     }
 
@@ -1203,7 +1216,92 @@ int runScript(const CLIOptions& opts) {
 #endif
     } else {
         // Normal mode: run main loop until quit
-        runtime->run();
+        // If debug server is enabled, we need to use a manual loop
+        std::unique_ptr<mystral::debug::DebugServer> debugServer;
+        int frameCount = 0;
+
+        if (opts.debugPort > 0) {
+            debugServer = std::make_unique<mystral::debug::DebugServer>(opts.debugPort);
+            if (!debugServer->start()) {
+                std::cerr << "Warning: Failed to start debug server on port " << opts.debugPort << std::endl;
+                debugServer.reset();
+            } else {
+                // Set up command handler
+                debugServer->setCommandHandler([&](const std::string& method, const std::string& params) -> std::string {
+                    // Handle getFrameCount
+                    if (method == "getFrameCount") {
+                        return "{\"frame\":" + std::to_string(frameCount) + "}";
+                    }
+
+                    // Handle screenshot
+                    if (method == "screenshot") {
+                        std::vector<uint8_t> frameData;
+                        uint32_t width, height;
+                        if (runtime->captureFrame(frameData, width, height)) {
+                            // Encode to PNG and return as base64
+                            // For now, return dimensions - full implementation would encode PNG
+                            return "{\"width\":" + std::to_string(width) + ",\"height\":" + std::to_string(height) + ",\"format\":\"rgba\",\"size\":" + std::to_string(frameData.size()) + "}";
+                        }
+                        return "{\"error\":\"Failed to capture frame\"}";
+                    }
+
+                    // Handle keyboard.press, keyboard.down, keyboard.up
+                    if (method.rfind("keyboard.", 0) == 0) {
+                        // Parse key from params
+                        // For now, return success - full implementation would inject SDL events
+                        return "{}";
+                    }
+
+                    // Handle mouse.move, mouse.click, mouse.down, mouse.up
+                    if (method.rfind("mouse.", 0) == 0) {
+                        // For now, return success - full implementation would inject SDL events
+                        return "{}";
+                    }
+
+                    // Handle waitForFrame - returns empty to signal async handling
+                    if (method == "waitForFrame") {
+                        // This would need to be handled asynchronously
+                        // For now, immediately return current frame
+                        return "{\"frame\":" + std::to_string(frameCount) + "}";
+                    }
+
+                    // Handle evaluate - execute JS in the runtime
+                    if (method == "evaluate") {
+                        // Would need to call runtime->evaluate() if available
+                        return "{\"error\":\"evaluate not yet implemented\"}";
+                    }
+
+                    return "{\"error\":\"Unknown method: " + method + "\"}";
+                });
+
+                if (!opts.quiet) {
+                    std::cout << "[DebugServer] Listening on ws://127.0.0.1:" << opts.debugPort << std::endl;
+                }
+            }
+        }
+
+        if (debugServer) {
+            // Manual loop with debug server
+            while (runtime->pollEvents()) {
+                frameCount++;
+
+                // Broadcast frameRendered event to connected clients
+                if (debugServer->getClientCount() > 0) {
+                    debugServer->broadcastEvent("frameRendered", "{\"frame\":" + std::to_string(frameCount) + "}");
+                }
+
+                // Small delay to prevent CPU spin
+                std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            }
+
+            // Broadcast exit event
+            int exitCode = runtime->getExitCode();
+            debugServer->broadcastEvent("exit", "{\"code\":" + std::to_string(exitCode) + "}");
+            debugServer->stop();
+        } else {
+            // Standard run loop (no debug server)
+            runtime->run();
+        }
 
         // Get exit code from process.exit() if called
         int exitCode = runtime->getExitCode();

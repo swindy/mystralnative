@@ -856,6 +856,7 @@ set(MYSTRAL_SOURCES
     src/audio/audio_bindings.cpp
     src/vfs/embedded_bundle.cpp
     src/async/event_loop.cpp
+    src/debug/debug_server.cpp
 )
 
 if(ANDROID)
