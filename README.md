@@ -174,6 +174,11 @@ mystral run examples/daynight.js
 # Sponza palace with day/night, torches, fireflies (Dawn builds only)
 mystral run examples/sponza.js
 
+# Three.js WebGPU (requires bundling, see docs site for full guide)
+npm install three@0.182.0
+npx esbuild examples/threejs-cube-src.js --bundle --outfile=threejs-bundle.js --format=esm --platform=browser
+mystral run threejs-bundle.js
+
 # Custom window size
 mystral run examples/simple-cube.js --width 1920 --height 1080
 
@@ -367,6 +372,10 @@ Prebuilt dependency binaries are managed via [mystralengine/library-builder](htt
 ## Documentation
 
 Full documentation is available at [mystralengine.github.io/mystralnative](https://mystralengine.github.io/mystralnative/).
+
+- [Three.js WebGPU Guide](https://mystralengine.github.io/mystralnative/docs/guides/threejs) - Using Three.js with MystralNative
+- [CLI Reference](https://mystralengine.github.io/mystralnative/docs/api/cli) - Command line options
+- [Building from Source](https://mystralengine.github.io/mystralnative/docs/guides/building) - Build configuration options
 
 ## Contributing
 
