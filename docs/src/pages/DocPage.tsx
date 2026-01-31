@@ -22,6 +22,7 @@ const sidebarItems = [
     items: [
       { label: 'Running Games', path: 'guides/running-games' },
       { label: 'Three.js WebGPU', path: 'guides/threejs' },
+      { label: 'PixiJS v8 WebGPU', path: 'guides/pixijs' },
       { label: 'Building from Source', path: 'guides/building' },
       { label: 'Configuration', path: 'guides/configuration' },
     ],

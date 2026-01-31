@@ -49,3 +49,12 @@ cmake --build build --parallel
 3. **wgpu-native shaders** - Some WGSL features only work with Dawn builds.
 
 See `tasks/mystralnativeprelaunch.md` for full issue list.
+
+## Documentation
+
+When creating new docs pages in `docs/docs/`:
+
+1. Create your `.mdx` file in the appropriate directory
+2. **Add it to the sidebar** in `docs/src/pages/DocPage.tsx` (in `sidebarItems`)
+
+Without adding to the sidebar, users cannot navigate to your page!

@@ -166,6 +166,47 @@ Manual dispatch is also available via Actions > Sponza Demo Build > Run workflow
 2. Push tags to the public repo to trigger release workflows
 3. Verify the GitHub Actions run succeeds and artifacts are published
 
+## Documentation
+
+The docs site is located in `docs/` and uses Vite + React with MDX for content.
+
+### Adding New Documentation Pages
+
+When creating a new documentation page:
+
+1. **Create the MDX file** in `docs/docs/` (e.g., `docs/docs/guides/my-new-guide.mdx`)
+2. **Add it to the sidebar** in `docs/src/pages/DocPage.tsx` - find the `sidebarItems` array and add your page
+
+**IMPORTANT**: If you don't add the page to the sidebar, users won't be able to find it! The sidebar configuration is in `docs/src/pages/DocPage.tsx`:
+
+```typescript
+const sidebarItems = [
+  {
+    title: 'Guides',
+    items: [
+      { label: 'Running Games', path: 'guides/running-games' },
+      { label: 'Three.js WebGPU', path: 'guides/threejs' },
+      { label: 'PixiJS v8 WebGPU', path: 'guides/pixijs' },
+      // Add your new page here!
+      { label: 'My New Guide', path: 'guides/my-new-guide' },
+    ],
+  },
+  // ... other sections
+];
+```
+
+### Adding Videos/Images
+
+Place media files in `docs/public/` and reference them with the `/mystralnative/` prefix:
+
+```jsx
+<video autoPlay loop muted playsInline>
+  <source src="/mystralnative/my-video.mp4" type="video/mp4" />
+</video>
+
+<img src="/mystralnative/my-image.png" alt="Description" />
+```
+
 ## Repository Sync
 
 This code syncs to the public repository `mystralengine/mystralnative`. See the main repo's `CLAUDE.md` for sync instructions.
