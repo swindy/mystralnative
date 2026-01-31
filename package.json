@@ -35,5 +35,8 @@
   "devDependencies": {
     "@anthropic-ai/sdk": "^0.24.0",
     "@types/bun": "^1.1.0"
+  },
+  "dependencies": {
+    "pixi.js": "^8"
   }
 }

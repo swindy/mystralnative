@@ -426,6 +426,36 @@ void Canvas2DContext::fillText(const std::string& text, float x, float y) {
 #endif
 }
 
+void Canvas2DContext::strokeText(const std::string& text, float x, float y) {
+#if defined(MYSTRAL_HAS_SKIA)
+    if (!impl_->canvas) return;
+
+    SkPaint paint = impl_->makeStrokePaint();
+
+    // Adjust x based on textAlign
+    SkScalar textWidth = impl_->currentFont.measureText(text.c_str(), text.length(), SkTextEncoding::kUTF8);
+    if (impl_->currentState.textAlign == "center") {
+        x -= textWidth / 2;
+    } else if (impl_->currentState.textAlign == "right" || impl_->currentState.textAlign == "end") {
+        x -= textWidth;
+    }
+
+    // Adjust y based on textBaseline
+    SkFontMetrics metrics;
+    impl_->currentFont.getMetrics(&metrics);
+    if (impl_->currentState.textBaseline == "top") {
+        y -= metrics.fAscent;
+    } else if (impl_->currentState.textBaseline == "middle") {
+        y -= (metrics.fAscent + metrics.fDescent) / 2;
+    } else if (impl_->currentState.textBaseline == "bottom") {
+        y -= metrics.fDescent;
+    }
+    // "alphabetic" is the default - no adjustment needed
+
+    impl_->canvas->drawString(text.c_str(), x, y, impl_->currentFont, paint);
+#endif
+}
+
 TextMetrics Canvas2DContext::measureText(const std::string& text) {
     TextMetrics metrics;
 
@@ -572,6 +602,57 @@ void Canvas2DContext::stroke() {
     if (!impl_->canvas) return;
     // snapshot() returns an SkPath without consuming the builder
     impl_->canvas->drawPath(impl_->pathBuilder.snapshot(), impl_->makeStrokePaint());
+#endif
+}
+
+// Transformations
+void Canvas2DContext::scale(float x, float y) {
+#if defined(MYSTRAL_HAS_SKIA)
+    if (!impl_->canvas) return;
+    impl_->canvas->scale(x, y);
+#endif
+}
+
+void Canvas2DContext::rotate(float angle) {
+#if defined(MYSTRAL_HAS_SKIA)
+    if (!impl_->canvas) return;
+    impl_->canvas->rotate(SkRadiansToDegrees(angle));
+#endif
+}
+
+void Canvas2DContext::translate(float x, float y) {
+#if defined(MYSTRAL_HAS_SKIA)
+    if (!impl_->canvas) return;
+    impl_->canvas->translate(x, y);
+#endif
+}
+
+void Canvas2DContext::setTransform(float a, float b, float c, float d, float e, float f) {
+#if defined(MYSTRAL_HAS_SKIA)
+    if (!impl_->canvas) return;
+    // Canvas 2D transform matrix: [a c e]
+    //                             [b d f]
+    //                             [0 0 1]
+    // SkMatrix uses column-major format
+    SkMatrix matrix;
+    matrix.setAll(a, c, e, b, d, f, 0, 0, 1);
+    impl_->canvas->setMatrix(matrix);
+#endif
+}
+
+void Canvas2DContext::transform(float a, float b, float c, float d, float e, float f) {
+#if defined(MYSTRAL_HAS_SKIA)
+    if (!impl_->canvas) return;
+    SkMatrix matrix;
+    matrix.setAll(a, c, e, b, d, f, 0, 0, 1);
+    impl_->canvas->concat(matrix);
+#endif
+}
+
+void Canvas2DContext::resetTransform() {
+#if defined(MYSTRAL_HAS_SKIA)
+    if (!impl_->canvas) return;
+    impl_->canvas->resetMatrix();
 #endif
 }
 

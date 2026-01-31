@@ -594,6 +594,12 @@ bool initBindings(js::Engine* engine, void* wgpuInstance, void* wgpuDevice, void
                     return a.empty() ? g_engine->newUndefined() : a[0];
                 })
             );
+            g_engine->setProperty(element, "remove",
+                g_engine->newFunction("remove", [](void* c, const std::vector<js::JSValueHandle>& a) {
+                    // No-op in native runtime - element is not attached to DOM
+                    return g_engine->newUndefined();
+                })
+            );
             g_engine->setProperty(element, "addEventListener",
                 g_engine->newFunction("addEventListener", [](void* c, const std::vector<js::JSValueHandle>& a) {
                     // No-op in native runtime
@@ -689,6 +695,112 @@ bool initBindings(js::Engine* engine, void* wgpuInstance, void* wgpuDevice, void
                         return canvas->context2d;
                     }
 
+                    if (contextType == "webgpu") {
+                        // Create GPUCanvasContext for offscreen canvas
+                        // This shares the main surface/device for simplicity
+                        std::cout << "[Canvas] Creating offscreen WebGPU context" << std::endl;
+                        auto canvasContext = g_engine->newObject();
+
+                        // Store reference to our surface
+                        g_engine->setPrivateData(canvasContext, g_surface);
+
+                        // context.canvas - reference back to canvas element
+                        std::string globalName = "__offscreenCanvas_" + std::to_string(canvasId);
+                        auto canvasElement = g_engine->getGlobalProperty(globalName.c_str());
+                        g_engine->setProperty(canvasContext, "canvas", canvasElement);
+
+                        // context.configure({ device, format, alphaMode })
+                        g_engine->setProperty(canvasContext, "configure",
+                            g_engine->newFunction("configure", [](void* ctx, const std::vector<js::JSValueHandle>& args) {
+                                if (args.empty()) {
+                                    g_engine->throwException("configure requires a descriptor");
+                                    return g_engine->newUndefined();
+                                }
+                                auto descriptor = args[0];
+                                std::string format = g_engine->toString(g_engine->getProperty(descriptor, "format"));
+                                g_surfaceFormat = stringToFormat(format);
+                                g_contextConfigured = true;
+                                std::cout << "[Canvas] Offscreen context configured with format: " << format << std::endl;
+                                return g_engine->newUndefined();
+                            })
+                        );
+
+                        // context.unconfigure()
+                        g_engine->setProperty(canvasContext, "unconfigure",
+                            g_engine->newFunction("unconfigure", [](void* ctx, const std::vector<js::JSValueHandle>& args) {
+                                return g_engine->newUndefined();
+                            })
+                        );
+
+                        // context.getCurrentTexture() -> GPUTexture
+                        g_engine->setProperty(canvasContext, "getCurrentTexture",
+                            g_engine->newFunction("getCurrentTexture", [](void* ctx, const std::vector<js::JSValueHandle>& args) {
+                                WGPUTexture texture = getCurrentSwapchainTexture();
+                                if (!texture) {
+                                    g_engine->throwException("Failed to get current texture");
+                                    return g_engine->newUndefined();
+                                }
+                                g_currentTexture = texture;
+
+                                // Create JS wrapper for texture
+                                auto jsTexture = g_engine->newObject();
+                                g_engine->setPrivateData(jsTexture, texture);
+
+                                // texture.width / height / depthOrArrayLayers
+                                g_engine->setProperty(jsTexture, "width", g_engine->newNumber(g_canvasWidth));
+                                g_engine->setProperty(jsTexture, "height", g_engine->newNumber(g_canvasHeight));
+                                g_engine->setProperty(jsTexture, "depthOrArrayLayers", g_engine->newNumber(1));
+
+                                // texture.format
+                                g_engine->setProperty(jsTexture, "format", g_engine->newString(formatToString(g_surfaceFormat)));
+
+                                // texture.createView(descriptor?) -> GPUTextureView
+                                g_engine->setProperty(jsTexture, "createView",
+                                    g_engine->newFunction("createView", [](void* c, const std::vector<js::JSValueHandle>& a) {
+                                        if (!g_currentTexture) {
+                                            g_engine->throwException("No current texture");
+                                            return g_engine->newUndefined();
+                                        }
+
+                                        WGPUTextureViewDescriptor viewDesc = {};
+                                        viewDesc.format = g_surfaceFormat;
+                                        viewDesc.dimension = WGPUTextureViewDimension_2D;
+                                        viewDesc.baseMipLevel = 0;
+                                        viewDesc.mipLevelCount = 1;
+                                        viewDesc.baseArrayLayer = 0;
+                                        viewDesc.arrayLayerCount = 1;
+                                        viewDesc.aspect = WGPUTextureAspect_All;
+
+                                        WGPUTextureView view = wgpuTextureCreateView(g_currentTexture, &viewDesc);
+                                        g_currentTextureView = view;
+
+                                        auto jsView = g_engine->newObject();
+                                        g_engine->setPrivateData(jsView, view);
+                                        g_engine->setProperty(jsView, "_type", g_engine->newString("textureView"));
+
+                                        return jsView;
+                                    })
+                                );
+
+                                // texture.destroy()
+                                g_engine->setProperty(jsTexture, "destroy",
+                                    g_engine->newFunction("destroy", [](void* c, const std::vector<js::JSValueHandle>& a) {
+                                        return g_engine->newUndefined();
+                                    })
+                                );
+
+                                return jsTexture;
+                            })
+                        );
+
+                        return canvasContext;
+                    }
+
+                    // Ignore webgl requests silently (PixiJS feature detection)
+                    if (contextType == "webgl" || contextType == "webgl2" || contextType == "experimental-webgl") {
+                        return g_engine->newNull();
+                    }
+
                     std::cerr << "[Canvas] Unsupported context type: " << contextType << std::endl;
                     return g_engine->newNull();
                 });
@@ -710,29 +822,47 @@ bool initBindings(js::Engine* engine, void* wgpuInstance, void* wgpuDevice, void
                         return g_engine->newString("data:image/png;base64,");
                     })
                 );
+
+                // getBoundingClientRect - return canvas dimensions
+                g_engine->setProperty(element, "getBoundingClientRect",
+                    g_engine->newFunction("getBoundingClientRect", [](void* c, const std::vector<js::JSValueHandle>& a) {
+                        // Get dimensions from the main canvas if available
+                        auto rect = g_engine->newObject();
+                        g_engine->setProperty(rect, "x", g_engine->newNumber(0));
+                        g_engine->setProperty(rect, "y", g_engine->newNumber(0));
+                        g_engine->setProperty(rect, "width", g_engine->newNumber(g_canvasWidth));
+                        g_engine->setProperty(rect, "height", g_engine->newNumber(g_canvasHeight));
+                        g_engine->setProperty(rect, "top", g_engine->newNumber(0));
+                        g_engine->setProperty(rect, "left", g_engine->newNumber(0));
+                        g_engine->setProperty(rect, "right", g_engine->newNumber(g_canvasWidth));
+                        g_engine->setProperty(rect, "bottom", g_engine->newNumber(g_canvasHeight));
+                        return rect;
+                    })
+                );
             }
 
             return element;
         })
     );
 
-    // Add document.body if not present
+    // Add document.body if not present, or enhance existing body with required methods
     auto existingBody = engine->getProperty(existingDocument, "body");
     if (engine->isUndefined(existingBody) || engine->isNull(existingBody)) {
-        auto bodyElement = engine->newObject();
-        engine->setProperty(bodyElement, "style", engine->newObject());
-        engine->setProperty(bodyElement, "appendChild",
-            engine->newFunction("appendChild", [](void* ctx, const std::vector<js::JSValueHandle>& args) {
-                return args.empty() ? g_engine->newUndefined() : args[0];
-            })
-        );
-        engine->setProperty(bodyElement, "removeChild",
-            engine->newFunction("removeChild", [](void* ctx, const std::vector<js::JSValueHandle>& args) {
-                return args.empty() ? g_engine->newUndefined() : args[0];
-            })
-        );
-        engine->setProperty(existingDocument, "body", bodyElement);
+        existingBody = engine->newObject();
+        engine->setProperty(existingDocument, "body", existingBody);
     }
+    // Always add/update these methods on body
+    engine->setProperty(existingBody, "style", engine->newObject());
+    engine->setProperty(existingBody, "appendChild",
+        engine->newFunction("appendChild", [](void* ctx, const std::vector<js::JSValueHandle>& args) {
+            return args.empty() ? g_engine->newUndefined() : args[0];
+        })
+    );
+    engine->setProperty(existingBody, "removeChild",
+        engine->newFunction("removeChild", [](void* ctx, const std::vector<js::JSValueHandle>& args) {
+            return args.empty() ? g_engine->newUndefined() : args[0];
+        })
+    );
 
     // ========================================================================
     // Navigator object
@@ -742,6 +872,18 @@ bool initBindings(js::Engine* engine, void* wgpuInstance, void* wgpuDevice, void
         navigatorHandle = engine->newObject();
         engine->setGlobalProperty("navigator", navigatorHandle);
     }
+
+    // Add common navigator properties for browser compatibility
+    // PixiJS and other libraries check these for feature detection
+    engine->setProperty(navigatorHandle, "userAgent",
+        engine->newString("Mozilla/5.0 (Macintosh; MystralNative/0.1) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36"));
+    engine->setProperty(navigatorHandle, "platform", engine->newString("MystralNative"));
+    engine->setProperty(navigatorHandle, "vendor", engine->newString("Mystral Engine"));
+    engine->setProperty(navigatorHandle, "language", engine->newString("en-US"));
+    engine->setProperty(navigatorHandle, "languages", engine->newArray(1));  // ["en-US"]
+    engine->setProperty(navigatorHandle, "onLine", engine->newBoolean(true));
+    engine->setProperty(navigatorHandle, "hardwareConcurrency", engine->newNumber(8));
+    engine->setProperty(navigatorHandle, "maxTouchPoints", engine->newNumber(0));
 
     // Create navigator.gpu object
     auto gpuObject = engine->newObject();
@@ -1021,27 +1163,86 @@ bool initBindings(js::Engine* engine, void* wgpuInstance, void* wgpuDevice, void
                                 return g_engine->newUndefined();
                             }
 
-                            // Parse source (ImageBitmap-like object with _data, width, height)
+                            // Parse source (ImageBitmap-like object or canvas element)
                             auto source = args[0];
                             auto sourceObj = g_engine->getProperty(source, "source");
                             if (g_engine->isUndefined(sourceObj)) {
                                 sourceObj = source; // source might be passed directly
                             }
 
-                            // Get ImageBitmap data
+                            int imgWidth = 0;
+                            int imgHeight = 0;
+                            size_t dataSize = 0;
+                            void* dataPtr = nullptr;
+
+                            // Try to get data from ImageBitmap
                             auto imageData = g_engine->getProperty(sourceObj, "_data");
-                            if (g_engine->isUndefined(imageData)) {
-                                g_engine->throwException("copyExternalImageToTexture: source must be an ImageBitmap with _data");
-                                return g_engine->newUndefined();
+                            if (!g_engine->isUndefined(imageData)) {
+                                // Standard ImageBitmap with _data
+                                imgWidth = (int)g_engine->toNumber(g_engine->getProperty(sourceObj, "width"));
+                                imgHeight = (int)g_engine->toNumber(g_engine->getProperty(sourceObj, "height"));
+                                dataPtr = g_engine->getArrayBufferData(imageData, &dataSize);
+                            } else {
+                                // Check if it's a canvas element
+                                auto tagName = g_engine->getProperty(sourceObj, "tagName");
+                                std::string tagNameStr = g_engine->isUndefined(tagName) ? "" : g_engine->toString(tagName);
+
+                                if (tagNameStr == "CANVAS" || tagNameStr == "canvas") {
+                                    // Get the canvas ID from private data or property
+                                    auto canvasIdProp = g_engine->getProperty(sourceObj, "_offscreenCanvasId");
+                                    if (!g_engine->isUndefined(canvasIdProp)) {
+                                        int canvasId = (int)g_engine->toNumber(canvasIdProp);
+                                        auto it = g_offscreenCanvases.find(canvasId);
+                                        if (it != g_offscreenCanvases.end() && it->second->hasContext2d) {
+                                            // Get pixel data from the 2D context
+                                            auto ctx2dHandle = it->second->context2d;
+                                            auto nativeCtx = static_cast<canvas::Canvas2DContext*>(g_engine->getPrivateData(ctx2dHandle));
+                                            if (nativeCtx) {
+                                                imgWidth = it->second->width;
+                                                imgHeight = it->second->height;
+                                                dataPtr = const_cast<void*>(static_cast<const void*>(nativeCtx->getPixelData()));
+                                                dataSize = nativeCtx->getPixelDataSize();
+                                            }
+                                        }
+                                    }
+                                }
+
+                                // Check if it's already a 2D context (has getImageData method or _contextType)
+                                auto contextType = g_engine->getProperty(sourceObj, "_contextType");
+                                if (!g_engine->isUndefined(contextType)) {
+                                    std::string ctxTypeStr = g_engine->toString(contextType);
+                                    if (ctxTypeStr == "2d") {
+                                        // It's a 2D context, get the canvas and then get pixel data
+                                        auto canvas = g_engine->getProperty(sourceObj, "canvas");
+                                        if (!g_engine->isUndefined(canvas)) {
+                                            auto canvasIdProp = g_engine->getProperty(canvas, "_offscreenCanvasId");
+                                            if (!g_engine->isUndefined(canvasIdProp)) {
+                                                int canvasId = (int)g_engine->toNumber(canvasIdProp);
+                                                auto it = g_offscreenCanvases.find(canvasId);
+                                                if (it != g_offscreenCanvases.end() && it->second->hasContext2d) {
+                                                    auto nativeCtx = static_cast<canvas::Canvas2DContext*>(g_engine->getPrivateData(sourceObj));
+                                                    if (nativeCtx) {
+                                                        imgWidth = it->second->width;
+                                                        imgHeight = it->second->height;
+                                                        dataPtr = const_cast<void*>(static_cast<const void*>(nativeCtx->getPixelData()));
+                                                        dataSize = nativeCtx->getPixelDataSize();
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
                             }
 
-                            int imgWidth = (int)g_engine->toNumber(g_engine->getProperty(sourceObj, "width"));
-                            int imgHeight = (int)g_engine->toNumber(g_engine->getProperty(sourceObj, "height"));
-
-                            size_t dataSize = 0;
-                            void* dataPtr = g_engine->getArrayBufferData(imageData, &dataSize);
                             if (!dataPtr || dataSize == 0) {
-                                g_engine->throwException("copyExternalImageToTexture: invalid ImageBitmap data");
+                                // Try to get width/height anyway for better error message
+                                auto widthProp = g_engine->getProperty(sourceObj, "width");
+                                auto heightProp = g_engine->getProperty(sourceObj, "height");
+                                if (!g_engine->isUndefined(widthProp)) imgWidth = (int)g_engine->toNumber(widthProp);
+                                if (!g_engine->isUndefined(heightProp)) imgHeight = (int)g_engine->toNumber(heightProp);
+
+                                std::cerr << "[WebGPU] copyExternalImageToTexture: unsupported source type, width=" << imgWidth << ", height=" << imgHeight << std::endl;
+                                // Return silently instead of throwing - PixiJS might be able to continue
                                 return g_engine->newUndefined();
                             }
 
@@ -2211,6 +2412,87 @@ bool initBindings(js::Engine* engine, void* wgpuInstance, void* wgpuDevice, void
                                             if (g_jsRenderPass && indirectBuffer) {
                                                 wgpuRenderPassEncoderDrawIndexedIndirect(g_jsRenderPass, indirectBuffer, indirectOffset);
                                                 if (g_verboseLogging) std::cout << "[WebGPU] DrawIndexedIndirect at offset " << indirectOffset << std::endl;
+                                            }
+
+                                            return g_engine->newUndefined();
+                                        })
+                                    );
+
+                                    // renderPass.setViewport(x, y, width, height, minDepth, maxDepth)
+                                    g_engine->setProperty(jsRenderPass, "setViewport",
+                                        g_engine->newFunction("setViewport", [](void* ctx, const std::vector<js::JSValueHandle>& args) {
+                                            if (args.size() < 6) return g_engine->newUndefined();
+
+                                            float x = (float)g_engine->toNumber(args[0]);
+                                            float y = (float)g_engine->toNumber(args[1]);
+                                            float width = (float)g_engine->toNumber(args[2]);
+                                            float height = (float)g_engine->toNumber(args[3]);
+                                            float minDepth = (float)g_engine->toNumber(args[4]);
+                                            float maxDepth = (float)g_engine->toNumber(args[5]);
+
+                                            if (g_jsRenderPass) {
+                                                wgpuRenderPassEncoderSetViewport(g_jsRenderPass, x, y, width, height, minDepth, maxDepth);
+                                                if (g_verboseLogging) std::cout << "[WebGPU] SetViewport: " << x << "," << y << " " << width << "x" << height << std::endl;
+                                            }
+
+                                            return g_engine->newUndefined();
+                                        })
+                                    );
+
+                                    // renderPass.setScissorRect(x, y, width, height)
+                                    g_engine->setProperty(jsRenderPass, "setScissorRect",
+                                        g_engine->newFunction("setScissorRect", [](void* ctx, const std::vector<js::JSValueHandle>& args) {
+                                            if (args.size() < 4) return g_engine->newUndefined();
+
+                                            uint32_t x = (uint32_t)g_engine->toNumber(args[0]);
+                                            uint32_t y = (uint32_t)g_engine->toNumber(args[1]);
+                                            uint32_t width = (uint32_t)g_engine->toNumber(args[2]);
+                                            uint32_t height = (uint32_t)g_engine->toNumber(args[3]);
+
+                                            if (g_jsRenderPass) {
+                                                wgpuRenderPassEncoderSetScissorRect(g_jsRenderPass, x, y, width, height);
+                                                if (g_verboseLogging) std::cout << "[WebGPU] SetScissorRect: " << x << "," << y << " " << width << "x" << height << std::endl;
+                                            }
+
+                                            return g_engine->newUndefined();
+                                        })
+                                    );
+
+                                    // renderPass.setBlendConstant(color)
+                                    g_engine->setProperty(jsRenderPass, "setBlendConstant",
+                                        g_engine->newFunction("setBlendConstant", [](void* ctx, const std::vector<js::JSValueHandle>& args) {
+                                            if (args.empty()) return g_engine->newUndefined();
+
+                                            auto color = args[0];
+                                            WGPUColor blendColor = {};
+                                            if (g_engine->isArray(color)) {
+                                                blendColor.r = g_engine->toNumber(g_engine->getPropertyIndex(color, 0));
+                                                blendColor.g = g_engine->toNumber(g_engine->getPropertyIndex(color, 1));
+                                                blendColor.b = g_engine->toNumber(g_engine->getPropertyIndex(color, 2));
+                                                blendColor.a = g_engine->toNumber(g_engine->getPropertyIndex(color, 3));
+                                            } else {
+                                                blendColor.r = g_engine->toNumber(g_engine->getProperty(color, "r"));
+                                                blendColor.g = g_engine->toNumber(g_engine->getProperty(color, "g"));
+                                                blendColor.b = g_engine->toNumber(g_engine->getProperty(color, "b"));
+                                                blendColor.a = g_engine->toNumber(g_engine->getProperty(color, "a"));
+                                            }
+
+                                            if (g_jsRenderPass) {
+                                                wgpuRenderPassEncoderSetBlendConstant(g_jsRenderPass, &blendColor);
+                                            }
+
+                                            return g_engine->newUndefined();
+                                        })
+                                    );
+
+                                    // renderPass.setStencilReference(reference)
+                                    g_engine->setProperty(jsRenderPass, "setStencilReference",
+                                        g_engine->newFunction("setStencilReference", [](void* ctx, const std::vector<js::JSValueHandle>& args) {
+                                            if (args.empty()) return g_engine->newUndefined();
+
+                                            uint32_t reference = (uint32_t)g_engine->toNumber(args[0]);
+                                            if (g_jsRenderPass) {
+                                                wgpuRenderPassEncoderSetStencilReference(g_jsRenderPass, reference);
                                             }
 
                                             return g_engine->newUndefined();
@@ -3553,6 +3835,43 @@ async function createImageBitmap(source, options) {
 
 globalThis.createImageBitmap = createImageBitmap;
 globalThis.ImageBitmap = ImageBitmap;
+
+// CanvasRenderingContext2D - Placeholder class for instanceof checks
+// The actual implementation is in Canvas2D bindings, this is just for type checking
+class CanvasRenderingContext2D {
+    constructor() {
+        // This constructor is never called directly - contexts are created via getContext('2d')
+    }
+}
+globalThis.CanvasRenderingContext2D = CanvasRenderingContext2D;
+
+// HTMLCanvasElement - Placeholder class for instanceof checks
+class HTMLCanvasElement {
+    constructor() {}
+}
+globalThis.HTMLCanvasElement = HTMLCanvasElement;
+
+// OffscreenCanvas - For type checking
+class OffscreenCanvas {
+    constructor(width, height) {
+        this.width = width || 300;
+        this.height = height || 150;
+        this._contextType = null;
+        this._context = null;
+    }
+
+    getContext(type, options) {
+        if (type === '2d') {
+            // For basic 2D context needs
+            if (!this._context) {
+                this._context = { canvas: this };
+            }
+            return this._context;
+        }
+        return null;
+    }
+}
+globalThis.OffscreenCanvas = OffscreenCanvas;
 )";
     engine->eval(imageBitmapPolyfill, "imageBitmap-polyfill.js");
 

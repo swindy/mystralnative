@@ -88,6 +88,7 @@ public:
     std::string getTextBaseline() const;
 
     void fillText(const std::string& text, float x, float y);
+    void strokeText(const std::string& text, float x, float y);
     TextMetrics measureText(const std::string& text);
 
     // ========================================================================
@@ -112,6 +113,16 @@ public:
 
     void fill();
     void stroke();
+
+    // ========================================================================
+    // Transformations
+    // ========================================================================
+    void scale(float x, float y);
+    void rotate(float angle);
+    void translate(float x, float y);
+    void setTransform(float a, float b, float c, float d, float e, float f);
+    void transform(float a, float b, float c, float d, float e, float f);
+    void resetTransform();
 
     // ========================================================================
     // Pixel Manipulation

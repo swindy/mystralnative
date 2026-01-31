@@ -170,6 +170,21 @@ js::JSValueHandle createCanvas2DJSObject(js::Engine* engine, Canvas2DContext* ct
         })
     );
 
+    // strokeText(text, x, y)
+    engine->setProperty(jsCtx, "strokeText",
+        engine->newFunction("strokeText", [](void* c, const std::vector<js::JSValueHandle>& args) {
+            auto self = g_jsEngine->getGlobalProperty("__canvas2dContext");
+            auto ctx = static_cast<Canvas2DContext*>(g_jsEngine->getPrivateData(self));
+            if (ctx && args.size() >= 3) {
+                std::string text = g_jsEngine->toString(args[0]);
+                float x = static_cast<float>(g_jsEngine->toNumber(args[1]));
+                float y = static_cast<float>(g_jsEngine->toNumber(args[2]));
+                ctx->strokeText(text, x, y);
+            }
+            return g_jsEngine->newUndefined();
+        })
+    );
+
     // measureText(text) -> { width }
     engine->setProperty(jsCtx, "measureText",
         engine->newFunction("measureText", [](void* c, const std::vector<js::JSValueHandle>& args) {
@@ -396,6 +411,100 @@ js::JSValueHandle createCanvas2DJSObject(js::Engine* engine, Canvas2DContext* ct
                 g_jsEngine->setProperty(result, "data", dataArray);
             }
             return result;
+        })
+    );
+
+    // Transform methods for PixiJS font rendering
+
+    // scale(x, y)
+    engine->setProperty(jsCtx, "scale",
+        engine->newFunction("scale", [](void* c, const std::vector<js::JSValueHandle>& args) {
+            auto self = g_jsEngine->getGlobalProperty("__canvas2dContext");
+            auto ctx = static_cast<Canvas2DContext*>(g_jsEngine->getPrivateData(self));
+            if (ctx && args.size() >= 2) {
+                ctx->scale(
+                    static_cast<float>(g_jsEngine->toNumber(args[0])),
+                    static_cast<float>(g_jsEngine->toNumber(args[1]))
+                );
+            }
+            return g_jsEngine->newUndefined();
+        })
+    );
+
+    // rotate(angle)
+    engine->setProperty(jsCtx, "rotate",
+        engine->newFunction("rotate", [](void* c, const std::vector<js::JSValueHandle>& args) {
+            auto self = g_jsEngine->getGlobalProperty("__canvas2dContext");
+            auto ctx = static_cast<Canvas2DContext*>(g_jsEngine->getPrivateData(self));
+            if (ctx && args.size() >= 1) {
+                ctx->rotate(static_cast<float>(g_jsEngine->toNumber(args[0])));
+            }
+            return g_jsEngine->newUndefined();
+        })
+    );
+
+    // translate(x, y)
+    engine->setProperty(jsCtx, "translate",
+        engine->newFunction("translate", [](void* c, const std::vector<js::JSValueHandle>& args) {
+            auto self = g_jsEngine->getGlobalProperty("__canvas2dContext");
+            auto ctx = static_cast<Canvas2DContext*>(g_jsEngine->getPrivateData(self));
+            if (ctx && args.size() >= 2) {
+                ctx->translate(
+                    static_cast<float>(g_jsEngine->toNumber(args[0])),
+                    static_cast<float>(g_jsEngine->toNumber(args[1]))
+                );
+            }
+            return g_jsEngine->newUndefined();
+        })
+    );
+
+    // setTransform(a, b, c, d, e, f)
+    engine->setProperty(jsCtx, "setTransform",
+        engine->newFunction("setTransform", [](void* c, const std::vector<js::JSValueHandle>& args) {
+            auto self = g_jsEngine->getGlobalProperty("__canvas2dContext");
+            auto ctx = static_cast<Canvas2DContext*>(g_jsEngine->getPrivateData(self));
+            if (ctx && args.size() >= 6) {
+                ctx->setTransform(
+                    static_cast<float>(g_jsEngine->toNumber(args[0])),
+                    static_cast<float>(g_jsEngine->toNumber(args[1])),
+                    static_cast<float>(g_jsEngine->toNumber(args[2])),
+                    static_cast<float>(g_jsEngine->toNumber(args[3])),
+                    static_cast<float>(g_jsEngine->toNumber(args[4])),
+                    static_cast<float>(g_jsEngine->toNumber(args[5]))
+                );
+            }
+            return g_jsEngine->newUndefined();
+        })
+    );
+
+    // transform(a, b, c, d, e, f)
+    engine->setProperty(jsCtx, "transform",
+        engine->newFunction("transform", [](void* c, const std::vector<js::JSValueHandle>& args) {
+            auto self = g_jsEngine->getGlobalProperty("__canvas2dContext");
+            auto ctx = static_cast<Canvas2DContext*>(g_jsEngine->getPrivateData(self));
+            if (ctx && args.size() >= 6) {
+                ctx->transform(
+                    static_cast<float>(g_jsEngine->toNumber(args[0])),
+                    static_cast<float>(g_jsEngine->toNumber(args[1])),
+                    static_cast<float>(g_jsEngine->toNumber(args[2])),
+                    static_cast<float>(g_jsEngine->toNumber(args[3])),
+                    static_cast<float>(g_jsEngine->toNumber(args[4])),
+                    static_cast<float>(g_jsEngine->toNumber(args[5]))
+                );
+            }
+            return g_jsEngine->newUndefined();
+        })
+    );
+
+    // resetTransform()
+    engine->setProperty(jsCtx, "resetTransform",
+        engine->newFunction("resetTransform", [](void* c, const std::vector<js::JSValueHandle>& args) {
+            auto self = g_jsEngine->getGlobalProperty("__canvas2dContext");
+            auto ctx = static_cast<Canvas2DContext*>(g_jsEngine->getPrivateData(self));
+            if (ctx) {
+                ctx->resetTransform();
+            }
+            return g_jsEngine->newUndefined();
         })
     );
 

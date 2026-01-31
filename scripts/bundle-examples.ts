@@ -17,15 +17,19 @@ const EXAMPLES_DIR = join(import.meta.dir, "../examples/internal/mystral-test");
 // Output goes to examples/ (synced to public repo)
 const OUTPUT_DIR = join(import.meta.dir, "../examples");
 
+// Separate source directories for different example types
+const PIXI_TEST_DIR = join(import.meta.dir, "../examples/internal/pixi-test");
+
 // List of example files to bundle (source -> output name)
-const EXAMPLES: Array<{ source: string; output: string }> = [
+const EXAMPLES: Array<{ source: string; output: string; dir?: string }> = [
   { source: "main.ts", output: "mystral-helmet.js" },
   { source: "daynight-demo.ts", output: "daynight.js" },
   { source: "sponza-native.ts", output: "sponza.js" },
+  { source: "main.ts", output: "pixi-test.js", dir: PIXI_TEST_DIR },
 ];
 
-async function bundleExample(example: { source: string; output: string }): Promise<boolean> {
-  const entryPath = join(EXAMPLES_DIR, example.source);
+async function bundleExample(example: { source: string; output: string; dir?: string }): Promise<boolean> {
+  const entryPath = join(example.dir || EXAMPLES_DIR, example.source);
   const outputPath = join(OUTPUT_DIR, example.output);
 
   console.log(`Bundling: ${example.source} -> ${example.output}`);
