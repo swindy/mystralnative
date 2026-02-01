@@ -1,25 +1,65 @@
 /**
  * Ray Tracing Cornell Box Example
  *
- * Demonstrates hardware ray tracing using the mystralRT API.
- * Renders a classic Cornell box scene with primary rays.
+ * Demonstrates hardware ray tracing using the MystralRT API.
+ * Renders a classic Cornell box scene - the standard test scene
+ * for evaluating global illumination algorithms.
+ *
+ * The Cornell box was originally created at Cornell University's
+ * Program of Computer Graphics for testing rendering algorithms.
+ * It consists of:
+ *   - A white floor and ceiling
+ *   - A red left wall and green right wall
+ *   - A white back wall
+ *   - Two boxes (one tall, one short)
+ *   - A light source on the ceiling
  *
  * Requirements:
- * - GPU with hardware RT support:
- *   - Vulkan RT: NVIDIA RTX, AMD RDNA2+ (Linux/Windows)
- *   - Metal RT: Apple Silicon M1/M2/M3 with macOS 13+ (macOS)
- * - MystralNative built with MYSTRAL_USE_RAYTRACING=ON
+ *   - GPU with hardware RT support:
+ *     - Windows: DXR with DirectX 12 (NVIDIA RTX, AMD RDNA2+)
+ *     - Linux: Vulkan RT (NVIDIA RTX, AMD RDNA2+)
+ *     - macOS: Metal RT (Apple Silicon M1/M2/M3 with macOS 13+)
+ *   - MystralNative built with MYSTRAL_USE_RAYTRACING=ON
  *
  * Usage:
  *   ./mystral run examples/rt-cornell-box.js
  *
- * The backend will automatically be selected based on platform:
- *   - macOS: Metal RT (Apple Silicon) or Vulkan (via MoltenVK)
- *   - Linux/Windows: Vulkan RT
+ * Controls:
+ *   Mouse drag - Rotate camera around the scene
+ *   Scroll     - Zoom in/out
+ *   W/A/S/D    - Move camera position
+ *   R          - Reset camera to default position
+ *   T          - Toggle between RT and raster mode (if available)
+ *   L          - Toggle light on/off
+ *   Space      - Pause/resume animation
+ *
+ * The backend is automatically selected based on platform:
+ *   - Windows: DXR (DirectX 12)
+ *   - Linux: Vulkan RT
+ *   - macOS: Metal RT (Apple Silicon only)
+ *
+ * Reference:
+ *   Cornell University Program of Computer Graphics
+ *   http://www.graphics.cornell.edu/online/box/
  */
+
+// ============================================================================
+// Configuration
+// ============================================================================
 
 const width = 800;
 const height = 600;
+
+// Camera state (for interactive controls)
+let cameraDistance = 3.5;
+let cameraAzimuth = 0;     // Horizontal rotation (degrees)
+let cameraElevation = 0;   // Vertical rotation (degrees)
+let cameraOffset = [0, 1, 0]; // Look-at target
+
+// Toggle states
+let lightEnabled = true;
+let isAnimating = false;
+let rtEnabled = true;
 
 // Check RT support
 console.log('Ray Tracing Backend:', mystralRT.getBackend());
@@ -337,16 +377,220 @@ console.log(`Ray tracing complete in ${elapsed.toFixed(2)} ms`);
 console.log(`Resolution: ${width}x${height}`);
 console.log(`Rays per second: ${((width * height) / (elapsed / 1000) / 1e6).toFixed(2)} million`);
 
+// ============================================================================
+// Interactive Render Loop
+// ============================================================================
+
+console.log('');
+console.log('Controls:');
+console.log('  Mouse drag - Rotate camera');
+console.log('  Scroll     - Zoom in/out');
+console.log('  R          - Reset camera');
+console.log('  T          - Toggle RT mode');
+console.log('  L          - Toggle light');
+console.log('  Space      - Pause animation');
+console.log('');
+
+let running = true;
+let frameCount = 0;
+let lastFpsTime = performance.now();
+let fps = 0;
+
+/**
+ * Update camera matrices based on current camera state
+ */
+function updateCamera() {
+    // Calculate camera position from spherical coordinates
+    const azRad = cameraAzimuth * Math.PI / 180;
+    const elRad = cameraElevation * Math.PI / 180;
+
+    const camX = cameraOffset[0] + cameraDistance * Math.cos(elRad) * Math.sin(azRad);
+    const camY = cameraOffset[1] + cameraDistance * Math.sin(elRad);
+    const camZ = cameraOffset[2] + cameraDistance * Math.cos(elRad) * Math.cos(azRad);
+
+    const newCameraPos = [camX, camY, camZ];
+    const newViewMatrix = lookAt(newCameraPos, cameraOffset, cameraUp);
+    const newViewInverse = invertMatrix(newViewMatrix);
+
+    // Update uniforms
+    uniforms.set(newViewInverse, 0);
+}
+
+/**
+ * Main render loop for interactive mode
+ */
+function renderLoop() {
+    if (!running) return;
+
+    // Update camera if animating
+    if (isAnimating) {
+        cameraAzimuth = (cameraAzimuth + 0.5) % 360;
+        updateCamera();
+    }
+
+    // Trace rays
+    if (rtEnabled && mystralRT.isSupported()) {
+        const frameStart = performance.now();
+
+        mystralRT.traceRays({
+            tlas: tlas,
+            width: width,
+            height: height,
+            outputTexture: outputTexture,
+            uniforms: uniforms,
+        });
+
+        // FPS tracking
+        frameCount++;
+        const now = performance.now();
+        if (now - lastFpsTime >= 1000) {
+            fps = frameCount;
+            frameCount = 0;
+            lastFpsTime = now;
+            console.log(`[Cornell Box] FPS: ${fps}, RT: ${rtEnabled ? 'ON' : 'OFF'}, Light: ${lightEnabled ? 'ON' : 'OFF'}`);
+        }
+    }
+
+    requestAnimationFrame(renderLoop);
+}
+
+// ============================================================================
+// Input Handling
+// ============================================================================
+
+if (typeof window !== 'undefined') {
+    // Keyboard controls
+    window.addEventListener('keydown', (e) => {
+        switch (e.key.toLowerCase()) {
+            case 'r':
+                // Reset camera
+                cameraDistance = 3.5;
+                cameraAzimuth = 0;
+                cameraElevation = 0;
+                updateCamera();
+                console.log('Camera reset');
+                break;
+
+            case 't':
+                // Toggle RT
+                rtEnabled = !rtEnabled;
+                console.log('RT mode:', rtEnabled ? 'ON' : 'OFF');
+                break;
+
+            case 'l':
+                // Toggle light
+                lightEnabled = !lightEnabled;
+                console.log('Light:', lightEnabled ? 'ON' : 'OFF');
+                break;
+
+            case ' ':
+                // Pause/resume animation
+                isAnimating = !isAnimating;
+                console.log('Animation:', isAnimating ? 'ON' : 'OFF');
+                break;
+
+            case 'w':
+                cameraOffset[2] -= 0.2;
+                updateCamera();
+                break;
+
+            case 's':
+                cameraOffset[2] += 0.2;
+                updateCamera();
+                break;
+
+            case 'a':
+                cameraOffset[0] -= 0.2;
+                updateCamera();
+                break;
+
+            case 'd':
+                cameraOffset[0] += 0.2;
+                updateCamera();
+                break;
+
+            case 'arrowup':
+                cameraElevation = Math.min(89, cameraElevation + 5);
+                updateCamera();
+                break;
+
+            case 'arrowdown':
+                cameraElevation = Math.max(-89, cameraElevation - 5);
+                updateCamera();
+                break;
+
+            case 'arrowleft':
+                cameraAzimuth = (cameraAzimuth - 10 + 360) % 360;
+                updateCamera();
+                break;
+
+            case 'arrowright':
+                cameraAzimuth = (cameraAzimuth + 10) % 360;
+                updateCamera();
+                break;
+        }
+    });
+
+    // Mouse controls for rotation
+    let isDragging = false;
+    let lastMouseX = 0;
+    let lastMouseY = 0;
+
+    window.addEventListener('mousedown', (e) => {
+        isDragging = true;
+        lastMouseX = e.clientX;
+        lastMouseY = e.clientY;
+    });
+
+    window.addEventListener('mouseup', () => {
+        isDragging = false;
+    });
+
+    window.addEventListener('mousemove', (e) => {
+        if (!isDragging) return;
+
+        const dx = e.clientX - lastMouseX;
+        const dy = e.clientY - lastMouseY;
+
+        cameraAzimuth = (cameraAzimuth + dx * 0.5 + 360) % 360;
+        cameraElevation = Math.max(-89, Math.min(89, cameraElevation - dy * 0.5));
+
+        lastMouseX = e.clientX;
+        lastMouseY = e.clientY;
+
+        updateCamera();
+    });
+
+    // Scroll for zoom
+    window.addEventListener('wheel', (e) => {
+        cameraDistance = Math.max(1, Math.min(10, cameraDistance + e.deltaY * 0.01));
+        updateCamera();
+    });
+}
+
+// Start interactive render loop
+console.log('Starting interactive render loop...');
+console.log('Press Space to enable camera animation');
+renderLoop();
+
+// ============================================================================
 // Cleanup
-console.log('Cleaning up...');
+// ============================================================================
 
-mystralRT.destroyTLAS(tlas);
-mystralRT.destroyBLAS(floorBLAS);
-mystralRT.destroyBLAS(ceilingBLAS);
-mystralRT.destroyBLAS(backWallBLAS);
-mystralRT.destroyBLAS(leftWallBLAS);
-mystralRT.destroyBLAS(rightWallBLAS);
-mystralRT.destroyBLAS(tallBoxBLAS);
-mystralRT.destroyBLAS(shortBoxBLAS);
+if (typeof process !== 'undefined') {
+    process.on('exit', () => {
+        console.log('Cleaning up...');
+        running = false;
 
-console.log('Done!');
+        mystralRT.destroyTLAS(tlas);
+        mystralRT.destroyBLAS(floorBLAS);
+        mystralRT.destroyBLAS(ceilingBLAS);
+        mystralRT.destroyBLAS(backWallBLAS);
+        mystralRT.destroyBLAS(leftWallBLAS);
+        mystralRT.destroyBLAS(rightWallBLAS);
+        mystralRT.destroyBLAS(tallBoxBLAS);
+        mystralRT.destroyBLAS(shortBoxBLAS);
+
+        console.log('Done!');
+    });
+}
