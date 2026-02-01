@@ -296,6 +296,7 @@ USAGE:
     mystral run <script.js> [options]         Run a JavaScript file
     mystral compile <entry.js> [options]      Bundle JS + assets into a single binary
     mystral --compile <entry.js> [options]    Same as compile
+    mystral bake <input.glb|input.js> [options]  Bake lightmaps for a scene
     mystral --version                         Show version information
     mystral --help                            Show this help message
 
@@ -330,6 +331,12 @@ COMPILE OPTIONS:
     --out, -o <file>      Alias for --output
     --root <dir>          Root directory for bundle paths (default: cwd)
     --bundle-only         Create standalone .bundle file (no exe, for .app packaging)
+
+BAKE OPTIONS (Lightmap Generation):
+    --output <dir>        Output directory for lightmaps (default: ./lightmaps)
+    --resolution <n>      Max lightmap atlas size (default: 2048)
+    --samples <n>         Rays per texel (default: 64)
+    --bounces <n>         Light bounces for GI (default: 2)
 
 HEADLESS MODE:
     Run without displaying a window (useful for servers, CI, etc.):
@@ -369,6 +376,8 @@ EXAMPLES:
     MYSTRAL_HEADLESS=1 mystral run render.js --screenshot render.png --frames 10
     mystral compile game.js --include assets --out my-game    # Bundle into a single binary
     mystral compile game.js --include assets --out game.bundle --bundle-only  # Standalone bundle file
+    mystral bake scene.glb --output ./lightmaps               # Bake lightmaps for scene
+    mystral bake game.js --resolution 1024 --samples 128      # Bake with custom settings
 
 ENVIRONMENT:
     MYSTRAL_HEADLESS=1        Run in headless mode (hidden window)
@@ -424,6 +433,11 @@ struct CLIOptions {
 
     // Verbose logging
     bool debug = false;  // Enable verbose WebGPU/shader logging
+
+    // Bake options
+    int bakeResolution = 2048;   // Max lightmap atlas size
+    int bakeSamples = 64;        // Rays per texel
+    int bakeBounces = 2;         // Light bounces for GI
 };
 
 CLIOptions parseArgs(int argc, char* argv[]) {
@@ -487,13 +501,23 @@ CLIOptions parseArgs(int argc, char* argv[]) {
             opts.debugPort = std::stoi(argv[++i]);
         } else if (arg == "--debug") {
             opts.debug = true;
+        } else if (arg == "--resolution" && i + 1 < argc) {
+            opts.bakeResolution = std::stoi(argv[++i]);
+        } else if (arg == "--samples" && i + 1 < argc) {
+            opts.bakeSamples = std::stoi(argv[++i]);
+        } else if (arg == "--bounces" && i + 1 < argc) {
+            opts.bakeBounces = std::stoi(argv[++i]);
         } else if ((arg == "run") && opts.command.empty()) {
             opts.command = "run";
         } else if ((arg == "compile" || arg == "--compile") && opts.command.empty()) {
             opts.command = "compile";
+        } else if ((arg == "bake") && opts.command.empty()) {
+            opts.command = "bake";
         } else if (opts.command == "run" && opts.scriptPath.empty()) {
             opts.scriptPath = arg;
         } else if (opts.command == "compile" && opts.scriptPath.empty() && (arg.empty() || arg[0] != '-')) {
+            opts.scriptPath = arg;
+        } else if (opts.command == "bake" && opts.scriptPath.empty() && (arg.empty() || arg[0] != '-')) {
             opts.scriptPath = arg;
         } else if (arg[0] == '-') {
             // Unknown flag - warn the user
@@ -1730,6 +1754,189 @@ int runScript(const CLIOptions& opts) {
     return 0;
 }
 
+/**
+ * Bake lightmaps for a scene.
+ * Generates a JavaScript wrapper that invokes the TypeScript lightmap baker.
+ */
+static int bakeLightmaps(const CLIOptions& opts) {
+    namespace fs = std::filesystem;
+
+    if (opts.scriptPath.empty()) {
+        std::cerr << "Error: No input file specified for bake." << std::endl;
+        std::cerr << "Usage: mystral bake <input.glb|input.js> --output <dir>" << std::endl;
+        return 1;
+    }
+
+    fs::path inputPath = opts.scriptPath;
+    if (!fs::exists(inputPath)) {
+        std::cerr << "Error: Input file not found: " << inputPath << std::endl;
+        return 1;
+    }
+
+    // Determine output directory
+    std::string outputDir = opts.outputPath.empty() ? "./lightmaps" : opts.outputPath;
+
+    if (!opts.quiet) {
+        std::cout << "=== Mystral Lightmap Baker ===" << std::endl;
+        std::cout << "Input: " << inputPath << std::endl;
+        std::cout << "Output: " << outputDir << std::endl;
+        std::cout << "Resolution: " << opts.bakeResolution << std::endl;
+        std::cout << "Samples: " << opts.bakeSamples << std::endl;
+        std::cout << "Bounces: " << opts.bakeBounces << std::endl;
+        std::cout << std::endl;
+    }
+
+    // Generate a temporary JavaScript file that loads the scene and bakes
+    std::string extension = inputPath.extension().string();
+    bool isGLB = (extension == ".glb" || extension == ".GLB" ||
+                  extension == ".gltf" || extension == ".GLTF");
+
+    std::string bakerScript;
+    if (isGLB) {
+        // Generate script to load GLB and bake
+        bakerScript = R"(
+import { Engine } from 'mystral';
+import { GLBLoader } from 'mystral/loaders/GLBLoader';
+import { LightmapBaker } from 'mystral/tools/lightmap-baker';
+
+async function main() {
+    console.log('[Bake] Starting lightmap bake...');
+
+    // Initialize engine in headless mode
+    const engine = new Engine({ headless: true, width: 1, height: 1 });
+    await engine.init();
+
+    // Load GLB
+    const loader = new GLBLoader(engine.device);
+    const result = await loader.load(')" + inputPath.string() + R"(');
+
+    console.log('[Bake] Scene loaded:', result.rootNode.name);
+
+    // Create baker and bake
+    const baker = new LightmapBaker(engine.device);
+    const bakeResult = await baker.bake({
+        scene: result.rootNode,
+        resolution: )" + std::to_string(opts.bakeResolution) + R"(,
+        samples: )" + std::to_string(opts.bakeSamples) + R"(,
+        bounces: )" + std::to_string(opts.bakeBounces) + R"(,
+        onProgress: (progress, message) => {
+            console.log(`[Bake] ${Math.round(progress * 100)}% - ${message}`);
+        },
+    });
+
+    // Save results
+    await bakeResult.save(')" + outputDir + R"(');
+
+    console.log('[Bake] Complete! Lightmaps saved to: )" + outputDir + R"(');
+    console.log('[Bake] Manifest:', JSON.stringify(bakeResult.manifest, null, 2));
+
+    process.exit(0);
+}
+
+main().catch(err => {
+    console.error('[Bake] Error:', err);
+    process.exit(1);
+});
+)";
+    } else {
+        // Input is a JS file - execute it directly but inject baker context
+        std::ifstream inputFile(inputPath);
+        if (!inputFile.is_open()) {
+            std::cerr << "Error: Cannot read input file: " << inputPath << std::endl;
+            return 1;
+        }
+        std::stringstream buffer;
+        buffer << inputFile.rdbuf();
+        std::string userScript = buffer.str();
+
+        bakerScript = R"(
+import { LightmapBaker } from 'mystral/tools/lightmap-baker';
+
+// User's scene setup script
+)" + userScript + R"(
+
+// Bake function injected by CLI
+async function __mystralBake(scene) {
+    const baker = new LightmapBaker();
+    const bakeResult = await baker.bake({
+        scene: scene,
+        resolution: )" + std::to_string(opts.bakeResolution) + R"(,
+        samples: )" + std::to_string(opts.bakeSamples) + R"(,
+        bounces: )" + std::to_string(opts.bakeBounces) + R"(,
+        onProgress: (progress, message) => {
+            console.log(`[Bake] ${Math.round(progress * 100)}% - ${message}`);
+        },
+    });
+
+    await bakeResult.save(')" + outputDir + R"(');
+    console.log('[Bake] Complete! Lightmaps saved to: )" + outputDir + R"(');
+}
+
+// Export for use by scene script
+globalThis.__mystralBake = __mystralBake;
+)";
+    }
+
+    // Write temporary script
+    std::error_code ec;
+    fs::path tempDir = fs::temp_directory_path(ec);
+    if (ec) {
+        std::cerr << "Error: Cannot get temp directory" << std::endl;
+        return 1;
+    }
+
+    fs::path tempScript = tempDir / ("mystral-bake-" + std::to_string(std::time(nullptr)) + ".js");
+    std::ofstream tempFile(tempScript);
+    if (!tempFile.is_open()) {
+        std::cerr << "Error: Cannot create temp script file" << std::endl;
+        return 1;
+    }
+    tempFile << bakerScript;
+    tempFile.close();
+
+    if (!opts.quiet) {
+        std::cout << "[Bake] Executing baker script..." << std::endl;
+    }
+
+    // Create runtime and execute the bake script
+    mystral::RuntimeConfig config;
+    config.width = 1;
+    config.height = 1;
+    config.title = "Mystral Lightmap Baker";
+    config.noSdl = true;  // No window needed for baking
+    config.debug = opts.debug;
+
+    auto runtime = mystral::Runtime::create(config);
+    if (!runtime) {
+        std::cerr << "Error: Failed to create runtime!" << std::endl;
+        fs::remove(tempScript, ec);
+        return 1;
+    }
+
+    // Load and execute the baker script
+    if (!runtime->loadScript(tempScript.string())) {
+        std::cerr << "Error: Failed to execute baker script!" << std::endl;
+        fs::remove(tempScript, ec);
+        return 1;
+    }
+
+    // Run until complete
+    while (runtime->pollEvents()) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+
+    int exitCode = runtime->getExitCode();
+
+    // Cleanup temp file
+    fs::remove(tempScript, ec);
+
+    if (!opts.quiet && exitCode == 0) {
+        std::cout << "=== Bake complete ===" << std::endl;
+    }
+
+    return exitCode;
+}
+
 int main(int argc, char* argv[]) {
     CLIOptions opts = parseArgs(argc, argv);
     std::string embeddedEntry = mystral::vfs::getEmbeddedEntryPath();
@@ -1761,6 +1968,16 @@ int main(int argc, char* argv[]) {
     // Handle 'compile' command
     if (opts.command == "compile") {
         return compileBundle(opts);
+    }
+
+    // Handle 'bake' command
+    if (opts.command == "bake") {
+        if (opts.scriptPath.empty()) {
+            std::cerr << "Error: No input file specified for bake." << std::endl;
+            std::cerr << "Usage: mystral bake <input.glb|input.js> --output <dir>" << std::endl;
+            return 1;
+        }
+        return bakeLightmaps(opts);
     }
 
     // Handle 'run' command
