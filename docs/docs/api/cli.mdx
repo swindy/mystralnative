@@ -35,6 +35,19 @@ mystral run <script.js> [options]
 | `--screenshot` | string | - | Take screenshot and exit |
 | `--frames` | number | 60 | Frames to render before screenshot |
 | `--quiet`, `-q` | flag | - | Suppress all output except errors |
+| `--debug` | flag | - | Enable verbose WebGPU/shader debug logging |
+| `--debug-port` | number | - | Enable debug server on specified port (for testing) |
+
+### Video Recording Options
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `--video`, `--record` | string | - | Record video to file (WebP or MP4) |
+| `--start-frame` | number | 0 | First frame to capture |
+| `--end-frame` | number | - | Last frame to capture (required for video) |
+| `--video-fps` | number | 60 | Video framerate |
+| `--video-quality` | number | 80 | WebP quality 0-100 (higher = better) |
+| `--mp4` | flag | - | Convert to MP4 (requires `ffmpeg` on PATH, auto-detected if path ends in .mp4) |
 
 ### Examples
 
@@ -53,6 +66,15 @@ mystral run game.js --headless
 
 # Take screenshot for CI testing
 mystral run game.js --headless --screenshot output.png --frames 120
+
+# Record 5 seconds of video (300 frames at 60fps)
+mystral run game.js --headless --video demo.webp --end-frame 300
+
+# Record video with MP4 output (requires FFmpeg)
+mystral run game.js --headless --video demo.mp4 --end-frame 600
+
+# Enable verbose debug logging
+mystral run game.js --debug
 ```
 
 ## mystral compile
