@@ -33,6 +33,21 @@
 #include <d3d11.h>
 #include <dxgi1_2.h>
 
+// Define IDirect3DDxgiInterfaceAccess if not already defined
+// This interface is needed to get D3D11 textures from WinRT surfaces
+// Some SDK versions may not define it properly via the interop header
+#ifndef __IDirect3DDxgiInterfaceAccess_INTERFACE_DEFINED__
+#define __IDirect3DDxgiInterfaceAccess_INTERFACE_DEFINED__
+MIDL_INTERFACE("A9B3D012-3DF2-4EE3-B8D1-8695F457D3C1")
+IDirect3DDxgiInterfaceAccess : public IUnknown
+{
+public:
+    virtual HRESULT STDMETHODCALLTYPE GetInterface(
+        REFIID iid,
+        _COM_Outptr_ void** p) = 0;
+};
+#endif
+
 // Media Foundation
 #include <mfapi.h>
 #include <mfidl.h>
@@ -295,7 +310,7 @@ private:
             if (!frame) return;
 
             auto surface = frame.Surface();
-            auto access = surface.as<IDirect3DDxgiInterfaceAccess>();
+            auto access = surface.as<::IDirect3DDxgiInterfaceAccess>();
 
             wrt::com_ptr<ID3D11Texture2D> texture;
             wrt::check_hresult(access->GetInterface(IID_PPV_ARGS(texture.put())));
