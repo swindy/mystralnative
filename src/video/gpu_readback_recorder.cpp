@@ -8,6 +8,11 @@
  * - Uses AsyncCapture for non-blocking GPU->CPU frame readback
  * - Encodes frames to WebP animation using libwebp
  * - Optionally converts to MP4 using FFmpeg
+ *
+ * NOTE: This implementation currently requires Dawn WebGPU backend due to use of
+ * Dawn-specific APIs (WGPUBufferMapCallbackInfo, WGPUCallbackMode_AllowSpontaneous).
+ * For wgpu-native builds, this returns nullptr and falls back to ScreenCaptureKit
+ * on macOS or disables recording on other platforms.
  */
 
 #include "mystral/video/video_recorder.h"
@@ -24,10 +29,16 @@
 #include <ctime>
 #include <filesystem>
 
-#ifdef MYSTRAL_HAS_WEBP_MUX
+// GPUReadbackRecorder requires Dawn due to Dawn-specific callback APIs
+#if defined(MYSTRAL_WEBGPU_DAWN) && defined(MYSTRAL_HAS_WEBP_MUX)
+#define MYSTRAL_GPU_READBACK_RECORDER_AVAILABLE 1
 #include <webp/encode.h>
 #include <webp/mux.h>
+#else
+#define MYSTRAL_GPU_READBACK_RECORDER_AVAILABLE 0
 #endif
+
+#if MYSTRAL_GPU_READBACK_RECORDER_AVAILABLE
 
 // Forward declaration of video capture callback registration from WebGPU bindings
 namespace mystral { namespace webgpu {
@@ -697,3 +708,24 @@ std::unique_ptr<VideoRecorder> createGPUReadbackRecorder(
 
 }  // namespace video
 }  // namespace mystral
+
+#else  // !MYSTRAL_GPU_READBACK_RECORDER_AVAILABLE
+
+// Stub implementation for wgpu-native builds (doesn't have Dawn-specific callback APIs)
+// Falls back to ScreenCaptureKit on macOS or disables recording on other platforms
+namespace mystral {
+namespace video {
+
+std::unique_ptr<VideoRecorder> createGPUReadbackRecorder(
+    WGPUDevice device, WGPUQueue queue, WGPUInstance instance) {
+    (void)device;
+    (void)queue;
+    (void)instance;
+    // Return nullptr - caller will fall back to native capture or disable recording
+    return nullptr;
+}
+
+}  // namespace video
+}  // namespace mystral
+
+#endif  // MYSTRAL_GPU_READBACK_RECORDER_AVAILABLE

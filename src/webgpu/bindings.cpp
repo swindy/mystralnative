@@ -5040,6 +5040,32 @@ void compositeCanvas2DToWebGPU() {
     g_screenshotReady = true;
 }
 
+// ============================================================================
+// Video capture callback support (used by GPUReadbackRecorder)
+// ============================================================================
+
+// Video capture callback - called when queue.submit happens with a surface texture
+// This allows the video recorder to capture frames without modifying the render loop
+static void (*g_videoCaptureCallback)(void* texture, uint32_t width, uint32_t height, void* userData) = nullptr;
+static void* g_videoCaptureUserData = nullptr;
+
+void setVideoCaptureCallback(void (*callback)(void* texture, uint32_t width, uint32_t height, void* userData), void* userData) {
+    g_videoCaptureCallback = callback;
+    g_videoCaptureUserData = userData;
+}
+
+void clearVideoCaptureCallback() {
+    g_videoCaptureCallback = nullptr;
+    g_videoCaptureUserData = nullptr;
+}
+
+// Internal function to invoke video capture callback (called from queue.submit)
+void invokeVideoCaptureCallback(WGPUTexture texture, uint32_t width, uint32_t height) {
+    if (g_videoCaptureCallback && texture) {
+        g_videoCaptureCallback(static_cast<void*>(texture), width, height, g_videoCaptureUserData);
+    }
+}
+
 void endDawnFrame() {
     // Composite Canvas 2D content to WebGPU if the main canvas uses 2D context
     compositeCanvas2DToWebGPU();
