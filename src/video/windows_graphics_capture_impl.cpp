@@ -14,7 +14,6 @@
 
 #ifdef _WIN32
 
-#include <memory>
 #include <string>
 
 namespace mystral {
@@ -38,8 +37,12 @@ bool checkWindowsGraphicsCaptureAvailable() {
     return false;
 }
 
-std::unique_ptr<WindowsGraphicsCaptureRecorderImpl> createWindowsGraphicsCaptureImpl() {
+WindowsGraphicsCaptureRecorderImpl* createWindowsGraphicsCaptureImplRaw() {
     return nullptr;
+}
+
+void destroyWindowsGraphicsCaptureImpl(WindowsGraphicsCaptureRecorderImpl* impl) {
+    delete impl;
 }
 
 // Interface functions called from windows_graphics_capture.cpp

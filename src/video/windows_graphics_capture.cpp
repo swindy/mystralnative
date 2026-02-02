@@ -18,7 +18,6 @@
 #ifdef _WIN32
 
 #include <iostream>
-#include <memory>
 
 namespace mystral {
 namespace video {
@@ -27,13 +26,13 @@ namespace video {
 class WindowsGraphicsCaptureRecorderImpl;
 
 // Check if Windows.Graphics.Capture is available (Windows 10 1803+)
-// Implemented in windows_graphics_capture_impl.cpp
 extern bool checkWindowsGraphicsCaptureAvailable();
 
-// Create the implementation (implemented in windows_graphics_capture_impl.cpp)
-extern std::unique_ptr<WindowsGraphicsCaptureRecorderImpl> createWindowsGraphicsCaptureImpl();
+// Create/destroy the implementation
+extern WindowsGraphicsCaptureRecorderImpl* createWindowsGraphicsCaptureImplRaw();
+extern void destroyWindowsGraphicsCaptureImpl(WindowsGraphicsCaptureRecorderImpl* impl);
 
-// Implementation interface functions (defined in windows_graphics_capture_impl.cpp)
+// Implementation interface functions
 extern bool implStartRecording(WindowsGraphicsCaptureRecorderImpl* impl, void* hwnd,
                                 const std::string& outputPath, int fps, int width, int height);
 extern bool implStopRecording(WindowsGraphicsCaptureRecorderImpl* impl);
@@ -43,74 +42,64 @@ extern int implGetDroppedFrames(WindowsGraphicsCaptureRecorderImpl* impl);
 
 /**
  * Windows Graphics Capture Video Recorder
- *
- * Wrapper that delegates to the pimpl implementation to avoid
- * C++/WinRT namespace conflicts with Windows.h
  */
 class WindowsGraphicsCaptureRecorder : public VideoRecorder {
 public:
-    WindowsGraphicsCaptureRecorder();
-    ~WindowsGraphicsCaptureRecorder() override;
+    WindowsGraphicsCaptureRecorder() : impl_(createWindowsGraphicsCaptureImplRaw()) {}
+
+    ~WindowsGraphicsCaptureRecorder() override {
+        if (impl_) {
+            destroyWindowsGraphicsCaptureImpl(impl_);
+            impl_ = nullptr;
+        }
+    }
 
     bool startRecording(void* nativeWindowHandle,
                         const std::string& outputPath,
-                        const VideoRecorderConfig& config) override;
-    bool stopRecording() override;
-    bool isRecording() const override;
-    VideoRecorderStats getStats() const override;
+                        const VideoRecorderConfig& config) override {
+        if (!impl_) {
+            std::cerr << "[WindowsGraphicsCapture] Implementation not available" << std::endl;
+            return false;
+        }
+        return implStartRecording(impl_, nativeWindowHandle, outputPath,
+                                  config.fps, config.width, config.height);
+    }
+
+    bool stopRecording() override {
+        if (!impl_) return false;
+        return implStopRecording(impl_);
+    }
+
+    bool isRecording() const override {
+        if (!impl_) return false;
+        return implIsRecording(impl_);
+    }
+
+    VideoRecorderStats getStats() const override {
+        VideoRecorderStats stats{};
+        if (impl_) {
+            stats.capturedFrames = implGetCapturedFrames(impl_);
+            stats.droppedFrames = implGetDroppedFrames(impl_);
+        }
+        return stats;
+    }
+
     const char* getTypeName() const override { return "WindowsGraphicsCaptureRecorder"; }
-    void processFrame() override;
-    bool captureFrame(void* texture, uint32_t width, uint32_t height) override;
+
+    void processFrame() override {
+        // No-op - capture happens via WinRT callbacks
+    }
+
+    bool captureFrame(void* texture, uint32_t width, uint32_t height) override {
+        (void)texture; (void)width; (void)height;
+        return true; // No-op - capture happens via WinRT callbacks
+    }
+
+    bool hasImpl() const { return impl_ != nullptr; }
 
 private:
-    friend std::unique_ptr<VideoRecorder> createWindowsGraphicsCaptureRecorder();
-    std::unique_ptr<WindowsGraphicsCaptureRecorderImpl> impl_;
+    WindowsGraphicsCaptureRecorderImpl* impl_;
 };
-
-WindowsGraphicsCaptureRecorder::WindowsGraphicsCaptureRecorder() {
-    impl_ = createWindowsGraphicsCaptureImpl();
-}
-
-WindowsGraphicsCaptureRecorder::~WindowsGraphicsCaptureRecorder() = default;
-
-bool WindowsGraphicsCaptureRecorder::startRecording(void* nativeWindowHandle,
-                                                      const std::string& outputPath,
-                                                      const VideoRecorderConfig& config) {
-    if (!impl_) {
-        std::cerr << "[WindowsGraphicsCapture] Implementation not available" << std::endl;
-        return false;
-    }
-    return implStartRecording(impl_.get(), nativeWindowHandle, outputPath,
-                              config.fps, config.width, config.height);
-}
-
-bool WindowsGraphicsCaptureRecorder::stopRecording() {
-    if (!impl_) return false;
-    return implStopRecording(impl_.get());
-}
-
-bool WindowsGraphicsCaptureRecorder::isRecording() const {
-    if (!impl_) return false;
-    return implIsRecording(impl_.get());
-}
-
-VideoRecorderStats WindowsGraphicsCaptureRecorder::getStats() const {
-    VideoRecorderStats stats{};
-    if (impl_) {
-        stats.capturedFrames = implGetCapturedFrames(impl_.get());
-        stats.droppedFrames = implGetDroppedFrames(impl_.get());
-    }
-    return stats;
-}
-
-void WindowsGraphicsCaptureRecorder::processFrame() {
-    // No-op - capture happens via WinRT callbacks
-}
-
-bool WindowsGraphicsCaptureRecorder::captureFrame(void* texture, uint32_t width, uint32_t height) {
-    (void)texture; (void)width; (void)height;
-    return true; // No-op - capture happens via WinRT callbacks
-}
 
 // Factory function
 std::unique_ptr<VideoRecorder> createWindowsGraphicsCaptureRecorder() {
@@ -118,7 +107,7 @@ std::unique_ptr<VideoRecorder> createWindowsGraphicsCaptureRecorder() {
         return nullptr;
     }
     auto recorder = std::make_unique<WindowsGraphicsCaptureRecorder>();
-    if (!recorder->impl_) {
+    if (!recorder->hasImpl()) {
         return nullptr;
     }
     return recorder;
