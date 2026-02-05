@@ -1,0 +1,481 @@
+# Bundling & Building Apps
+
+MystralNative supports **ES modules** and **TypeScript** out of the box. You can run multi-file TypeScript projects with relative imports directly (not node_modules, see below for bundling node_modules dependencies):
+
+```bash
+mystral run src/main.ts
+```
+
+Relative imports and TypeScript are handled natively — `import { Player } from './player.ts'` just works. No build step required during development.
+
+**When do you need a bundler?** You need to bundle when:
+
+- Your project uses **npm packages** (e.g., `three`, `pixi.js`) — the runtime resolves relative imports but bundling is the simplest way to include `node_modules` dependencies
+- You want to **distribute** your app — `mystral compile` takes a single JS entry point and packages it into a standalone executable
+- You want **tree shaking** and **minification** for smaller builds
+
+## Running Without a Bundler
+
+For projects that only use relative imports (no npm packages), you can skip bundling entirely:
+
+```
+my-game/
+├── src/
+│   ├── main.ts         # Entry point
+│   ├── renderer.ts     # import { Renderer } from './renderer.ts'
+│   └── player.ts       # import { Player } from './player.ts'
+└── assets/
+    └── model.glb
+```
+
+```bash
+# Just run it — TypeScript + ES modules work natively
+mystral run src/main.ts
+
+# Watch mode for development
+mystral run src/main.ts --watch
+```
+
+MystralNative uses SWC to transpile TypeScript on the fly and has a full module resolver that handles relative imports, file extensions (`.ts`, `.js`, `.mjs`), directory `index` files, and `package.json` `exports` fields.
+
+## When to Bundle
+
+If your project imports from `node_modules`, you'll want a bundler to resolve and inline those dependencies into a single file:
+
+```
+Your project + npm deps           Single JS file           Desktop app
+┌──────────────────┐    bundle   ┌──────────┐   mystral   ┌──────────┐
+│ src/main.ts      │  ───────►   │ game.js  │  ────────►  │ game.exe │
+│ src/renderer.ts  │             └──────────┘   compile    └──────────┘
+│ node_modules/    │
+└──────────────────┘
+```
+
+1. **Bundle** your project + npm dependencies into a single `.js` file (using Vite, esbuild, Bun, etc.)
+2. **Run** it with `mystral run dist/game.js`
+3. **Compile** it with `mystral compile dist/game.js` to create a standalone executable
+
+## Quick Start with Vite
+
+### 1. Create the Project
+
+```bash
+mkdir my-game && cd my-game
+npm init -y
+npm install -D vite typescript
+```
+
+### 2. Configure Vite
+
+Create `vite.config.ts`:
+
+```typescript
+import { defineConfig } from 'vite';
+
+export default defineConfig({
+  build: {
+    // Output a single JS file (no HTML, no CSS splitting)
+    lib: {
+      entry: 'src/main.ts',
+      formats: ['es'],
+      fileName: 'game',
+    },
+    // Don't generate an HTML file
+    rollupOptions: {
+      output: {
+        // Single chunk, no code splitting
+        manualChunks: undefined,
+        inlineDynamicImports: true,
+      },
+    },
+    // Output to dist/
+    outDir: 'dist',
+    // Don't empty outDir (preserves assets you may copy there)
+    emptyOutDir: true,
+  },
+});
+```
+
+### 3. Write Your Game
+
+Create `src/main.ts`:
+
+```typescript
+// Standard Web APIs work in MystralNative
+const canvas = document.createElement('canvas');
+canvas.width = 800;
+canvas.height = 600;
+document.body.appendChild(canvas);
+
+const adapter = await navigator.gpu.requestAdapter();
+const device = await adapter!.requestDevice();
+const context = canvas.getContext('webgpu')!;
+const format = navigator.gpu.getPreferredCanvasFormat();
+
+context.configure({ device, format });
+
+// Your game code here...
+console.log('Game started!');
+```
+
+### 4. Add Build Scripts
+
+In `package.json`:
+
+```json
+{
+  "scripts": {
+    "build": "vite build",
+    "dev": "vite build --watch"
+  }
+}
+```
+
+### 5. Build and Run
+
+```bash
+# Build the bundle
+npm run build
+
+# Run with MystralNative
+mystral run dist/game.js
+
+# Or use watch mode for development
+npm run dev &
+mystral run dist/game.js --watch
+```
+
+## Using Vite with `tsc -b`
+
+If your `package.json` uses the common `"build": "tsc -b && vite build"` pattern, the TypeScript compilation step (`tsc -b`) is for type checking only. Vite handles the actual transpilation and bundling. You can simplify this:
+
+```json
+{
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build": "vite build",
+    "build:check": "tsc --noEmit && vite build"
+  }
+}
+```
+
+The `vite build` command transpiles TypeScript and bundles everything into a single file. The `tsc` step is optional but recommended for catching type errors before building.
+
+## Using esbuild
+
+For simple projects, esbuild is the fastest option:
+
+```bash
+npm install -D esbuild
+```
+
+Bundle directly:
+
+```bash
+npx esbuild src/main.ts --bundle --outfile=dist/game.js --format=esm --platform=browser
+```
+
+Or add it to `package.json`:
+
+```json
+{
+  "scripts": {
+    "build": "esbuild src/main.ts --bundle --outfile=dist/game.js --format=esm --platform=browser"
+  }
+}
+```
+
+### esbuild Options Explained
+
+| Flag | Purpose |
+|------|---------|
+| `--bundle` | Inline all imports into one file |
+| `--format=esm` | Output ES modules (recommended for MystralNative) |
+| `--platform=browser` | Use browser-compatible APIs |
+| `--outfile=dist/game.js` | Output path |
+| `--minify` | Optional: reduce file size for distribution |
+| `--sourcemap` | Optional: generate source maps for debugging |
+
+## Using Bun's Bundler
+
+If you have [Bun](https://bun.sh) installed, you can use its built-in bundler:
+
+```bash
+bun build src/main.ts --outfile dist/game.js --target browser --format esm
+```
+
+MystralNative also ships a prebundle script you can use directly:
+
+```bash
+# Clone or install mystralnative, then:
+bun scripts/prebundle.ts src/main.ts --out dist/game.js
+```
+
+## Using npm Packages
+
+This is the main reason to use a bundler. All bundlers resolve `node_modules` imports automatically, inlining the library code into your output file. For example, to use Three.js:
+
+```bash
+npm install three
+```
+
+```typescript
+// src/main.ts
+import * as THREE from 'three/webgpu';
+
+const renderer = new THREE.WebGPURenderer();
+await renderer.init();
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(75, 800 / 600, 0.1, 1000);
+// ...
+```
+
+The bundler inlines everything from `three` into your single output file, which MystralNative can then run directly.
+
+## Important: `import.meta` Replacement
+
+Some libraries (including Vite-generated code) use `import.meta.env` or `import.meta.url`. MystralNative's JavaScript engines don't support `import.meta` in the same way browsers do.
+
+**With esbuild**, define a replacement:
+
+```bash
+npx esbuild src/main.ts --bundle --outfile=dist/game.js --format=esm \
+  --platform=browser --define:import.meta.env={} --define:import.meta.url='""'
+```
+
+**With Vite**, add a plugin to `vite.config.ts`:
+
+```typescript
+import { defineConfig, Plugin } from 'vite';
+
+function replaceImportMeta(): Plugin {
+  return {
+    name: 'replace-import-meta',
+    generateBundle(_, bundle) {
+      for (const chunk of Object.values(bundle)) {
+        if (chunk.type === 'chunk') {
+          chunk.code = chunk.code.replace(
+            /import\.meta/g,
+            '({ env: {}, url: "" })'
+          );
+        }
+      }
+    },
+  };
+}
+
+export default defineConfig({
+  plugins: [replaceImportMeta()],
+  build: {
+    lib: {
+      entry: 'src/main.ts',
+      formats: ['es'],
+      fileName: 'game',
+    },
+    rollupOptions: {
+      output: {
+        inlineDynamicImports: true,
+      },
+    },
+  },
+});
+```
+
+**With Bun**, this is handled automatically by the `prebundle.ts` script.
+
+## Full Vite Example Project
+
+Here's a complete project structure for a game that uses npm packages (requiring a bundler):
+
+```
+my-game/
+├── src/
+│   ├── main.ts          # Entry point
+│   ├── renderer.ts      # WebGPU renderer
+│   ├── game.ts          # Game logic
+│   └── types.ts         # Type definitions
+├── assets/
+│   ├── models/
+│   │   └── character.glb
+│   └── textures/
+│       └── diffuse.png
+├── dist/                 # Build output (gitignored)
+│   └── game.js
+├── vite.config.ts
+├── tsconfig.json
+└── package.json
+```
+
+`tsconfig.json`:
+
+```json
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "outDir": "dist"
+  },
+  "include": ["src"]
+}
+```
+
+`vite.config.ts`:
+
+```typescript
+import { defineConfig, Plugin } from 'vite';
+
+function replaceImportMeta(): Plugin {
+  return {
+    name: 'replace-import-meta',
+    generateBundle(_, bundle) {
+      for (const chunk of Object.values(bundle)) {
+        if (chunk.type === 'chunk') {
+          chunk.code = chunk.code.replace(
+            /import\.meta/g,
+            '({ env: {}, url: "" })'
+          );
+        }
+      }
+    },
+  };
+}
+
+export default defineConfig({
+  plugins: [replaceImportMeta()],
+  build: {
+    lib: {
+      entry: 'src/main.ts',
+      formats: ['es'],
+      fileName: 'game',
+    },
+    rollupOptions: {
+      output: {
+        inlineDynamicImports: true,
+      },
+    },
+    outDir: 'dist',
+    emptyOutDir: true,
+  },
+});
+```
+
+`package.json`:
+
+```json
+{
+  "name": "my-game",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "vite build",
+    "dev": "vite build --watch",
+    "typecheck": "tsc --noEmit",
+    "start": "mystral run src/main.ts",
+    "start:bundle": "vite build && mystral run dist/game.js",
+    "compile": "vite build && mystral compile dist/game.js --include assets --out dist/my-game"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.0",
+    "vite": "^6.0.0"
+  }
+}
+```
+
+## Loading Assets
+
+Assets are loaded relative to the script via `file://`:
+
+```typescript
+// Load a GLB model
+const response = await fetch('file://./assets/models/character.glb');
+const buffer = await response.arrayBuffer();
+
+// Load a texture
+const texResponse = await fetch('file://./assets/textures/diffuse.png');
+```
+
+This works the same whether you're running source files directly or a bundled output.
+
+## Creating a Desktop Executable
+
+To distribute your app, compile it into a standalone binary with `mystral compile`. This command takes a **single JS entry point**, so if you have multiple source files, you'll need to bundle them first:
+
+```bash
+# If using a bundler:
+npm run build
+mystral compile dist/game.js --include assets --out dist/my-game
+
+# If your app is a single file:
+mystral compile src/game.js --include assets --out dist/my-game
+
+# Run the executable directly (no mystral CLI needed)
+./dist/my-game
+```
+
+### macOS .app Bundle
+
+For macOS distribution, use `--bundle-only` and the packaging script:
+
+```bash
+# Create the bundle file
+mystral compile dist/game.js --include assets --bundle-only --out dist/game.bundle
+
+# Package as .app
+./scripts/package-app.sh \
+    --binary $(which mystral) \
+    --name "My Game" \
+    --bundle dist/game.bundle \
+    --output dist
+```
+
+## Development Workflow
+
+### Without a Bundler (No npm Dependencies)
+
+If your project only uses relative imports, use MystralNative's watch mode directly:
+
+```bash
+mystral run src/main.ts --watch
+```
+
+Edit any `.ts` file, and MystralNative clears all module caches and re-executes from scratch.
+
+### With a Bundler (npm Dependencies)
+
+When using a bundler, run both watch processes:
+
+**Terminal 1** - Watch and rebuild on changes:
+```bash
+npm run dev   # vite build --watch
+```
+
+**Terminal 2** - Run with auto-reload:
+```bash
+mystral run dist/game.js --watch
+```
+
+When you edit any source file, Vite rebuilds the bundle, and MystralNative detects the change and reloads automatically.
+
+## Comparison of Bundlers
+
+| Feature | Vite | esbuild | Bun |
+|---------|------|---------|-----|
+| Speed | Fast | Fastest | Fast |
+| TypeScript | Built-in | Built-in | Built-in |
+| npm packages | Yes | Yes | Yes |
+| Config needed | `vite.config.ts` | CLI flags | CLI flags |
+| Plugins | Rich ecosystem | Limited | Limited |
+| Tree shaking | Yes | Yes | Yes |
+| Best for | Complex projects | Simple projects | Bun users |
+
+## Next Steps
+
+- [Running Games](/mystralnative/docs/guides/running-games) - CLI usage and options
+- [CLI Commands](/mystralnative/docs/api/cli) - Full `mystral run` and `mystral compile` reference
+- [Input Events](/mystralnative/docs/guides/input-events) - Keyboard, mouse, and gamepad input
+- [Three.js WebGPU](/mystralnative/docs/guides/threejs) - Using Three.js with MystralNative

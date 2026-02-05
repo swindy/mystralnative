@@ -1,0 +1,440 @@
+# Input Events
+
+MystralNative implements standard DOM input events, so browser-targeted game code works without changes. Under the hood, SDL3 native events are translated into familiar `KeyboardEvent`, `MouseEvent`, `PointerEvent`, `WheelEvent`, and Gamepad API objects.
+
+## Event Targets
+
+Events can be listened on three targets, matching browser behavior:
+
+| Target | Receives |
+|--------|----------|
+| `window` | Keyboard, gamepad, resize events |
+| `document` | All event types |
+| `canvas` | Pointer, mouse, wheel events |
+
+```javascript
+// Keyboard events on window
+window.addEventListener('keydown', (e) => { /* ... */ });
+
+// Pointer events on canvas
+const canvas = document.querySelector('canvas');
+canvas.addEventListener('pointermove', (e) => { /* ... */ });
+```
+
+## Keyboard Events
+
+### Supported Events
+
+| Event | Fired When |
+|-------|------------|
+| `keydown` | A key is pressed (fires repeatedly when held) |
+| `keyup` | A key is released |
+
+### Event Properties
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `key` | string | Character value or key name (`"a"`, `"Enter"`, `"ArrowUp"`) |
+| `code` | string | Physical key code (`"KeyA"`, `"Enter"`, `"ArrowUp"`) |
+| `keyCode` | number | Legacy numeric key code |
+| `repeat` | boolean | `true` if this is a repeated keydown from holding the key |
+| `ctrlKey` | boolean | Ctrl/Control modifier state |
+| `shiftKey` | boolean | Shift modifier state |
+| `altKey` | boolean | Alt/Option modifier state |
+| `metaKey` | boolean | Meta/Command/Windows modifier state |
+
+### Example: WASD Movement
+
+```javascript
+const keys = new Set();
+
+window.addEventListener('keydown', (e) => {
+  keys.add(e.code);
+});
+
+window.addEventListener('keyup', (e) => {
+  keys.delete(e.code);
+});
+
+function update() {
+  const speed = 5;
+  if (keys.has('KeyW')) player.y -= speed;
+  if (keys.has('KeyS')) player.y += speed;
+  if (keys.has('KeyA')) player.x -= speed;
+  if (keys.has('KeyD')) player.x += speed;
+
+  requestAnimationFrame(update);
+}
+requestAnimationFrame(update);
+```
+
+### Supported Keys
+
+**Letters and numbers:**
+- `key`: `"a"`–`"z"` (uppercase when Shift held), `"0"`–`"9"`
+- `code`: `"KeyA"`–`"KeyZ"`, `"Digit0"`–`"Digit9"`
+
+**Navigation:**
+- `ArrowUp`, `ArrowDown`, `ArrowLeft`, `ArrowRight`
+- `Home`, `End`, `PageUp`, `PageDown`
+
+**Editing:**
+- `Backspace`, `Delete`, `Insert`, `Enter`, `Tab`, `Escape`, `Space`
+
+**Function keys:**
+- `F1`–`F12`
+
+**Modifiers:**
+- `key`: `"Shift"`, `"Control"`, `"Alt"`, `"Meta"`, `"CapsLock"`
+- `code`: `"ShiftLeft"`, `"ShiftRight"`, `"ControlLeft"`, `"ControlRight"`, `"AltLeft"`, `"AltRight"`, `"MetaLeft"`, `"MetaRight"`
+
+**Punctuation:**
+- Keys: `` ` ``, `-`, `=`, `[`, `]`, `\`, `;`, `'`, `,`, `.`, `/`
+- Codes: `Backquote`, `Minus`, `Equal`, `BracketLeft`, `BracketRight`, `Backslash`, `Semicolon`, `Quote`, `Comma`, `Period`, `Slash`
+
+## Mouse Events
+
+### Supported Events
+
+| Event | Fired When |
+|-------|------------|
+| `mousemove` | Mouse cursor moves |
+| `mousedown` | A mouse button is pressed |
+| `mouseup` | A mouse button is released |
+| `click` | Left mouse button press and release |
+
+### Event Properties
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `clientX` | number | X position in window coordinates |
+| `clientY` | number | Y position in window coordinates |
+| `pageX` | number | Same as `clientX` |
+| `pageY` | number | Same as `clientY` |
+| `offsetX` | number | Same as `clientX` |
+| `offsetY` | number | Same as `clientY` |
+| `movementX` | number | X delta since last `mousemove` |
+| `movementY` | number | Y delta since last `mousemove` |
+| `button` | number | Which button triggered this event |
+| `buttons` | number | Bitmask of all currently pressed buttons |
+| `ctrlKey` | boolean | Ctrl modifier state |
+| `shiftKey` | boolean | Shift modifier state |
+| `altKey` | boolean | Alt modifier state |
+| `metaKey` | boolean | Meta modifier state |
+
+### Button Values
+
+| `button` | Meaning |
+|----------|---------|
+| 0 | Left (primary) |
+| 1 | Middle (wheel) |
+| 2 | Right (secondary) |
+| 3 | Back (mouse button 4) |
+| 4 | Forward (mouse button 5) |
+
+### Example: Click Detection
+
+```javascript
+canvas.addEventListener('mousedown', (e) => {
+  if (e.button === 0) {
+    console.log(`Left click at (${e.clientX}, ${e.clientY})`);
+  } else if (e.button === 2) {
+    console.log('Right click');
+  }
+});
+```
+
+## Pointer Events
+
+Pointer events unify mouse, touch, and pen input. They provide the same properties as mouse events plus additional pointer-specific data. Most games should prefer pointer events over mouse events.
+
+### Supported Events
+
+| Event | Fired When |
+|-------|------------|
+| `pointerdown` | Pointer (mouse/touch/pen) is pressed |
+| `pointerup` | Pointer is released |
+| `pointermove` | Pointer moves |
+
+### Additional Properties
+
+All mouse event properties are available, plus:
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `pointerId` | number | Unique identifier for this pointer (1 for mouse) |
+| `pointerType` | string | `"mouse"`, `"touch"`, or `"pen"` |
+| `isPrimary` | boolean | `true` for primary pointer (mouse or first touch) |
+| `width` | number | Contact width (1 for mouse) |
+| `height` | number | Contact height (1 for mouse) |
+| `pressure` | number | Pressure from 0.0 to 1.0 (0.5 when mouse button pressed) |
+
+### Example: Camera Controls
+
+This pattern is used by the Sponza demo for first-person camera rotation:
+
+```javascript
+let isPointerDown = false;
+let lastX = 0;
+let lastY = 0;
+
+canvas.addEventListener('pointerdown', (e) => {
+  if (e.button === 0 || e.button === 2) {
+    isPointerDown = true;
+    lastX = e.clientX;
+    lastY = e.clientY;
+  }
+});
+
+canvas.addEventListener('pointermove', (e) => {
+  if (!isPointerDown) return;
+
+  const deltaX = e.clientX - lastX;
+  const deltaY = e.clientY - lastY;
+  lastX = e.clientX;
+  lastY = e.clientY;
+
+  // Rotate camera
+  camera.yaw += deltaX * 0.005;
+  camera.pitch -= deltaY * 0.005;
+});
+
+canvas.addEventListener('pointerup', () => {
+  isPointerDown = false;
+});
+```
+
+## Wheel Events
+
+### Supported Events
+
+| Event | Fired When |
+|-------|------------|
+| `wheel` | Mouse wheel is scrolled |
+
+### Event Properties
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `clientX` | number | Mouse X position when scroll occurred |
+| `clientY` | number | Mouse Y position when scroll occurred |
+| `deltaX` | number | Horizontal scroll amount |
+| `deltaY` | number | Vertical scroll amount (negative = scroll up) |
+| `deltaZ` | number | Z-axis scroll amount (usually 0) |
+| `deltaMode` | number | Unit: 0 = pixels |
+| `ctrlKey` | boolean | Ctrl modifier state |
+| `shiftKey` | boolean | Shift modifier state |
+| `altKey` | boolean | Alt modifier state |
+| `metaKey` | boolean | Meta modifier state |
+
+### Example: Zoom Control
+
+```javascript
+let zoom = 1.0;
+
+canvas.addEventListener('wheel', (e) => {
+  // Scroll up = zoom in, scroll down = zoom out
+  zoom -= e.deltaY * 0.001;
+  zoom = Math.max(0.1, Math.min(10.0, zoom));
+  camera.fov = 60 / zoom;
+});
+```
+
+## Gamepad API
+
+MystralNative implements the standard W3C Gamepad API. Controllers are automatically detected when connected.
+
+### Connection Events
+
+```javascript
+window.addEventListener('gamepadconnected', (e) => {
+  console.log('Gamepad connected:', e.gamepad.id);
+  console.log('Index:', e.gamepad.index);
+});
+
+window.addEventListener('gamepaddisconnected', (e) => {
+  console.log('Gamepad disconnected:', e.gamepad.id);
+});
+```
+
+### Polling Gamepad State
+
+Gamepad state must be polled each frame (it's not event-driven):
+
+```javascript
+function update() {
+  const gamepads = navigator.getGamepads();
+
+  for (const gamepad of gamepads) {
+    if (!gamepad) continue;
+
+    // Left stick
+    const moveX = gamepad.axes[0]; // -1 (left) to 1 (right)
+    const moveY = gamepad.axes[1]; // -1 (up) to 1 (down)
+
+    // Right stick
+    const lookX = gamepad.axes[2];
+    const lookY = gamepad.axes[3];
+
+    // Triggers
+    const leftTrigger = gamepad.axes[4];   // 0 to 1
+    const rightTrigger = gamepad.axes[5];  // 0 to 1
+
+    // Buttons
+    if (gamepad.buttons[0].pressed) jump();     // A / Cross
+    if (gamepad.buttons[1].pressed) dodge();    // B / Circle
+    if (gamepad.buttons[2].pressed) attack();   // X / Square
+    if (gamepad.buttons[3].pressed) interact(); // Y / Triangle
+  }
+
+  requestAnimationFrame(update);
+}
+requestAnimationFrame(update);
+```
+
+### Button Mapping (Standard Layout)
+
+| Index | Xbox | PlayStation | Description |
+|-------|------|-------------|-------------|
+| 0 | A | Cross | Bottom face button |
+| 1 | B | Circle | Right face button |
+| 2 | X | Square | Left face button |
+| 3 | Y | Triangle | Top face button |
+| 4 | LB | L1 | Left bumper |
+| 5 | RB | R1 | Right bumper |
+| 6 | LT | L2 | Left trigger (as button) |
+| 7 | RT | R2 | Right trigger (as button) |
+| 8 | Back | Select | Back/Select |
+| 9 | Start | Start | Start/Options |
+| 10 | LS | L3 | Left stick click |
+| 11 | RS | R3 | Right stick click |
+| 12 | - | - | D-pad up |
+| 13 | - | - | D-pad down |
+| 14 | - | - | D-pad left |
+| 15 | - | - | D-pad right |
+| 16 | Guide | PS | Home/guide button |
+
+### Axes
+
+| Index | Description | Range |
+|-------|-------------|-------|
+| 0 | Left stick X | -1 (left) to 1 (right) |
+| 1 | Left stick Y | -1 (up) to 1 (down) |
+| 2 | Right stick X | -1 (left) to 1 (right) |
+| 3 | Right stick Y | -1 (up) to 1 (down) |
+| 4 | Left trigger | 0 to 1 |
+| 5 | Right trigger | 0 to 1 |
+
+### Button Object
+
+Each entry in `gamepad.buttons` has:
+
+```javascript
+{
+  pressed: true,  // Boolean: is the button currently pressed?
+  value: 1.0      // Number: 0.0 to 1.0 (analog value, 0 or 1 for digital buttons)
+}
+```
+
+### Deadzone Handling
+
+Analog sticks rarely return exactly 0 when idle. Apply a deadzone:
+
+```javascript
+function applyDeadzone(value, threshold = 0.15) {
+  if (Math.abs(value) < threshold) return 0;
+  // Remap the remaining range to 0-1
+  const sign = Math.sign(value);
+  return sign * (Math.abs(value) - threshold) / (1 - threshold);
+}
+
+const moveX = applyDeadzone(gamepad.axes[0]);
+const moveY = applyDeadzone(gamepad.axes[1]);
+```
+
+## Combined Input Example
+
+A common pattern is supporting both keyboard+mouse and gamepad:
+
+```javascript
+const input = {
+  moveX: 0, moveY: 0,
+  lookX: 0, lookY: 0,
+  jump: false, attack: false,
+};
+
+// Keyboard state
+const keys = new Set();
+window.addEventListener('keydown', (e) => keys.add(e.code));
+window.addEventListener('keyup', (e) => keys.delete(e.code));
+
+// Mouse look
+let mouseDeltaX = 0, mouseDeltaY = 0;
+canvas.addEventListener('pointermove', (e) => {
+  mouseDeltaX += e.movementX;
+  mouseDeltaY += e.movementY;
+});
+
+function update() {
+  // Reset
+  input.moveX = 0; input.moveY = 0;
+  input.lookX = 0; input.lookY = 0;
+  input.jump = false; input.attack = false;
+
+  // Keyboard + mouse
+  if (keys.has('KeyW')) input.moveY -= 1;
+  if (keys.has('KeyS')) input.moveY += 1;
+  if (keys.has('KeyA')) input.moveX -= 1;
+  if (keys.has('KeyD')) input.moveX += 1;
+  if (keys.has('Space')) input.jump = true;
+  input.lookX += mouseDeltaX * 0.002;
+  input.lookY += mouseDeltaY * 0.002;
+  mouseDeltaX = 0; mouseDeltaY = 0;
+
+  // Gamepad (overrides if connected)
+  const gp = navigator.getGamepads()[0];
+  if (gp) {
+    const lx = applyDeadzone(gp.axes[0]);
+    const ly = applyDeadzone(gp.axes[1]);
+    const rx = applyDeadzone(gp.axes[2]);
+    const ry = applyDeadzone(gp.axes[3]);
+
+    if (lx || ly) { input.moveX = lx; input.moveY = ly; }
+    if (rx || ry) { input.lookX = rx * 0.05; input.lookY = ry * 0.05; }
+    if (gp.buttons[0].pressed) input.jump = true;
+    if (gp.buttons[2].pressed) input.attack = true;
+  }
+
+  // Use input.moveX, input.moveY, etc. for game logic
+  requestAnimationFrame(update);
+}
+requestAnimationFrame(update);
+```
+
+## Window Resize Events
+
+The `resize` event fires when the window is resized:
+
+```javascript
+window.addEventListener('resize', () => {
+  const width = window.innerWidth;
+  const height = window.innerHeight;
+  canvas.width = width;
+  canvas.height = height;
+  // Reconfigure your renderer
+});
+```
+
+## Notes and Limitations
+
+- **`preventDefault()` and `stopPropagation()`** are available on all events but are no-ops in the native runtime (there's no browser default behavior to prevent).
+- **Pointer lock** (`requestPointerLock`) is not yet implemented. Use `movementX`/`movementY` from `pointermove` events for relative mouse movement.
+- **Touch events** (`touchstart`, `touchmove`, `touchend`) are not yet available. Use pointer events instead, touch events will be supported in a future release.
+- **Focus events** (`focus`, `blur`) are not implemented. The native window is always considered focused.
+- Up to **4 gamepads** can be connected simultaneously.
+
+## Next Steps
+
+- [JavaScript APIs](/mystralnative/docs/api/javascript) - Full API reference including WebGPU, Audio, and more
+- [Running Games](/mystralnative/docs/guides/running-games) - CLI options for running your game
+- [Bundling & Building](/mystralnative/docs/guides/bundling) - How to bundle TypeScript projects
