@@ -18,14 +18,16 @@ This will:
 
 Download the appropriate build for your platform from the [releases page](https://github.com/mystralengine/mystralnative/releases):
 
-| Platform | Recommended Build |
-|----------|-------------------|
-| macOS (Apple Silicon) | `mystral-macOS-arm64-v8-dawn.zip` |
-| macOS (Intel) | `mystral-macOS-x64-v8-dawn.zip` |
-| Windows | `mystral-windows-x64-v8-dawn.zip` |
-| Linux | `mystral-linux-x64-v8-dawn.zip` |
+| Platform | Minimum Version | Recommended Build |
+|----------|----------------|-------------------|
+| macOS (Apple Silicon) | macOS 14+ | `mystral-macOS-arm64-v8-dawn.zip` |
+| macOS (Intel) | macOS 14+ | `mystral-macOS-x64-v8-dawn.zip` |
+| Windows | Windows 11 | `mystral-windows-x64-v8-dawn.zip` |
+| Linux | Ubuntu 24.04+ (glibc 2.39) | `mystral-linux-x64-v8-dawn.zip` |
 
 **Dawn builds** are recommended for best WebGPU shader compatibility. **V8 builds** provide full ES2024+ JavaScript support with JIT compilation.
+
+> **Linux users:** The prebuilt binaries are linked against glibc 2.39. If you see `GLIBC_2.xx not found` errors on older distributions, [build from source](/mystralnative/docs/guides/building) instead.
 
 ### After Download
 
