@@ -406,6 +406,9 @@ public:
         // Set up fetch API
         setupFetch();
 
+        // Set up file system and path APIs (fs.readFile, path.join, etc.)
+        setupFileSystem();
+
         // Set up URL parsing and Worker polyfill (needed for Draco decoder, etc.)
         setupURL();
 
@@ -1978,6 +1981,655 @@ globalThis.Response = Response;
 
         jsEngine_->eval(fetchPolyfill, "fetch-polyfill.js");
         std::cout << "[Mystral] Fetch API initialized (file://, http://, https://)" << std::endl;
+    }
+
+    // ========================================================================
+    // File System & Path APIs
+    // Provides globalThis.fs and globalThis.path objects for file I/O and
+    // path manipulation. C++ native functions (__fs*, __path*) are registered
+    // first, then a JS polyfill assembles the public API.
+    // ========================================================================
+    void setupFileSystem() {
+        if (!jsEngine_) return;
+
+        // ------------------------------------------------------------------
+        // __fsReadFile(path, encoding)
+        // encoding = "utf-8" -> returns string; null/undefined -> ArrayBuffer
+        // ------------------------------------------------------------------
+        jsEngine_->setGlobalProperty("__fsReadFile",
+            jsEngine_->newFunction("__fsReadFile", [this](void* ctx, const std::vector<js::JSValueHandle>& args) {
+                if (args.empty()) {
+                    return jsEngine_->newNull();
+                }
+                std::string path = jsEngine_->toString(args[0]);
+                bool asText = false;
+                if (args.size() > 1 && !jsEngine_->isNull(args[1]) && !jsEngine_->isUndefined(args[1])) {
+                    asText = true;
+                }
+
+                std::error_code ec;
+                if (!std::filesystem::exists(path, ec)) {
+                    // Throw an error string that the JS polyfill can catch
+                    std::string err = "ENOENT: no such file or directory, open '" + path + "'";
+                    return jsEngine_->newString(("\xFF" + err).c_str()); // sentinel prefix
+                }
+
+                std::ifstream file(path, std::ios::binary | std::ios::ate);
+                if (!file.is_open()) {
+                    std::string err = "EACCES: permission denied, open '" + path + "'";
+                    return jsEngine_->newString(("\xFF" + err).c_str());
+                }
+
+                size_t size = file.tellg();
+                file.seekg(0, std::ios::beg);
+                std::vector<uint8_t> buffer(size);
+                if (!file.read(reinterpret_cast<char*>(buffer.data()), size)) {
+                    std::string err = "EIO: I/O error reading '" + path + "'";
+                    return jsEngine_->newString(("\xFF" + err).c_str());
+                }
+
+                if (asText) {
+                    std::string text(buffer.begin(), buffer.end());
+                    return jsEngine_->newString(text.c_str());
+                }
+                return jsEngine_->newArrayBuffer(buffer.data(), buffer.size());
+            })
+        );
+
+        // ------------------------------------------------------------------
+        // __fsWriteFile(path, content)  — write text
+        // ------------------------------------------------------------------
+        jsEngine_->setGlobalProperty("__fsWriteFile",
+            jsEngine_->newFunction("__fsWriteFile", [this](void* ctx, const std::vector<js::JSValueHandle>& args) {
+                if (args.size() < 2) return jsEngine_->newBoolean(false);
+                std::string path = jsEngine_->toString(args[0]);
+                std::string content = jsEngine_->toString(args[1]);
+
+                // Ensure parent directory exists
+                std::error_code ec;
+                auto parent = std::filesystem::path(path).parent_path();
+                if (!parent.empty() && !std::filesystem::exists(parent, ec)) {
+                    std::filesystem::create_directories(parent, ec);
+                }
+
+                std::ofstream file(path, std::ios::binary | std::ios::trunc);
+                if (!file.is_open()) return jsEngine_->newBoolean(false);
+                file.write(content.data(), content.size());
+                return jsEngine_->newBoolean(true);
+            })
+        );
+
+        // ------------------------------------------------------------------
+        // __fsWriteFileBuffer(path, arrayBuffer)  — write binary
+        // ------------------------------------------------------------------
+        jsEngine_->setGlobalProperty("__fsWriteFileBuffer",
+            jsEngine_->newFunction("__fsWriteFileBuffer", [this](void* ctx, const std::vector<js::JSValueHandle>& args) {
+                if (args.size() < 2) return jsEngine_->newBoolean(false);
+                std::string path = jsEngine_->toString(args[0]);
+
+                size_t size = 0;
+                void* data = jsEngine_->getArrayBufferData(args[1], &size);
+                if (!data || size == 0) return jsEngine_->newBoolean(false);
+
+                // Ensure parent directory exists
+                std::error_code ec;
+                auto parent = std::filesystem::path(path).parent_path();
+                if (!parent.empty() && !std::filesystem::exists(parent, ec)) {
+                    std::filesystem::create_directories(parent, ec);
+                }
+
+                std::ofstream file(path, std::ios::binary | std::ios::trunc);
+                if (!file.is_open()) return jsEngine_->newBoolean(false);
+                file.write(static_cast<const char*>(data), size);
+                return jsEngine_->newBoolean(true);
+            })
+        );
+
+        // ------------------------------------------------------------------
+        // __fsExists(path) -> bool
+        // ------------------------------------------------------------------
+        jsEngine_->setGlobalProperty("__fsExists",
+            jsEngine_->newFunction("__fsExists", [this](void* ctx, const std::vector<js::JSValueHandle>& args) {
+                if (args.empty()) return jsEngine_->newBoolean(false);
+                std::string path = jsEngine_->toString(args[0]);
+                std::error_code ec;
+                return jsEngine_->newBoolean(std::filesystem::exists(path, ec));
+            })
+        );
+
+        // ------------------------------------------------------------------
+        // __fsUnlink(path) -> bool
+        // ------------------------------------------------------------------
+        jsEngine_->setGlobalProperty("__fsUnlink",
+            jsEngine_->newFunction("__fsUnlink", [this](void* ctx, const std::vector<js::JSValueHandle>& args) {
+                if (args.empty()) return jsEngine_->newBoolean(false);
+                std::string path = jsEngine_->toString(args[0]);
+                std::error_code ec;
+                return jsEngine_->newBoolean(std::filesystem::remove(path, ec));
+            })
+        );
+
+        // ------------------------------------------------------------------
+        // __fsMkdir(path, recursive) -> bool
+        // ------------------------------------------------------------------
+        jsEngine_->setGlobalProperty("__fsMkdir",
+            jsEngine_->newFunction("__fsMkdir", [this](void* ctx, const std::vector<js::JSValueHandle>& args) {
+                if (args.empty()) return jsEngine_->newBoolean(false);
+                std::string path = jsEngine_->toString(args[0]);
+                bool recursive = args.size() > 1 && jsEngine_->toBoolean(args[1]);
+                std::error_code ec;
+                if (recursive) {
+                    return jsEngine_->newBoolean(std::filesystem::create_directories(path, ec));
+                }
+                return jsEngine_->newBoolean(std::filesystem::create_directory(path, ec));
+            })
+        );
+
+        // ------------------------------------------------------------------
+        // __fsRmdir(path, recursive) -> bool
+        // ------------------------------------------------------------------
+        jsEngine_->setGlobalProperty("__fsRmdir",
+            jsEngine_->newFunction("__fsRmdir", [this](void* ctx, const std::vector<js::JSValueHandle>& args) {
+                if (args.empty()) return jsEngine_->newBoolean(false);
+                std::string path = jsEngine_->toString(args[0]);
+                bool recursive = args.size() > 1 && jsEngine_->toBoolean(args[1]);
+                std::error_code ec;
+                if (recursive) {
+                    auto removed = std::filesystem::remove_all(path, ec);
+                    return jsEngine_->newBoolean(removed > 0 && !ec);
+                }
+                return jsEngine_->newBoolean(std::filesystem::remove(path, ec));
+            })
+        );
+
+        // ------------------------------------------------------------------
+        // __fsReaddir(path) -> array of strings  (null on error)
+        // ------------------------------------------------------------------
+        jsEngine_->setGlobalProperty("__fsReaddir",
+            jsEngine_->newFunction("__fsReaddir", [this](void* ctx, const std::vector<js::JSValueHandle>& args) {
+                if (args.empty()) return jsEngine_->newNull();
+                std::string dirPath = jsEngine_->toString(args[0]);
+                std::error_code ec;
+                if (!std::filesystem::is_directory(dirPath, ec)) {
+                    return jsEngine_->newNull();
+                }
+
+                auto arr = jsEngine_->newArray();
+                int index = 0;
+                for (auto& entry : std::filesystem::directory_iterator(dirPath, ec)) {
+                    std::string name = entry.path().filename().generic_string();
+                    jsEngine_->setPropertyIndex(arr, index++, jsEngine_->newString(name.c_str()));
+                }
+                return arr;
+            })
+        );
+
+        // ------------------------------------------------------------------
+        // __fsStat(path) -> object {size, isFile, isDirectory, ...} or null
+        // ------------------------------------------------------------------
+        jsEngine_->setGlobalProperty("__fsStat",
+            jsEngine_->newFunction("__fsStat", [this](void* ctx, const std::vector<js::JSValueHandle>& args) {
+                if (args.empty()) return jsEngine_->newNull();
+                std::string path = jsEngine_->toString(args[0]);
+                std::error_code ec;
+                auto status = std::filesystem::status(path, ec);
+                if (ec || status.type() == std::filesystem::file_type::not_found) {
+                    return jsEngine_->newNull();
+                }
+
+                auto obj = jsEngine_->newObject();
+
+                // File size (0 for directories)
+                uintmax_t fileSize = 0;
+                if (std::filesystem::is_regular_file(status)) {
+                    fileSize = std::filesystem::file_size(path, ec);
+                    if (ec) fileSize = 0;
+                }
+                jsEngine_->setProperty(obj, "size", jsEngine_->newNumber(static_cast<double>(fileSize)));
+                jsEngine_->setProperty(obj, "isFile", jsEngine_->newBoolean(std::filesystem::is_regular_file(status)));
+                jsEngine_->setProperty(obj, "isDirectory", jsEngine_->newBoolean(std::filesystem::is_directory(status)));
+                jsEngine_->setProperty(obj, "isSymbolicLink", jsEngine_->newBoolean(std::filesystem::is_symlink(path, ec)));
+
+                // Permissions (mode as integer)
+                auto perms = status.permissions();
+                jsEngine_->setProperty(obj, "mode", jsEngine_->newNumber(static_cast<double>(static_cast<int>(perms))));
+
+                // Timestamps (milliseconds since epoch)
+                // Use file_time_type duration directly (portable across C++17/20)
+                auto lwt = std::filesystem::last_write_time(path, ec);
+                auto fileTimeDuration = lwt.time_since_epoch();
+                // Convert to milliseconds (file_clock epoch varies by platform,
+                // but the relative value is useful; on Windows this is since 1601)
+                auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(fileTimeDuration);
+                // Approximate conversion to Unix epoch (Jan 1, 1970)
+                // Windows file_time_type epoch is Jan 1, 1601 (11644473600 seconds before Unix epoch)
+#ifdef _WIN32
+                double mtimeMs = static_cast<double>(ms.count()) - 11644473600000.0;
+#else
+                double mtimeMs = static_cast<double>(ms.count());
+#endif
+                jsEngine_->setProperty(obj, "mtime", jsEngine_->newNumber(mtimeMs));
+                jsEngine_->setProperty(obj, "atime", jsEngine_->newNumber(mtimeMs)); // atime not available via std::filesystem
+                jsEngine_->setProperty(obj, "ctime", jsEngine_->newNumber(mtimeMs)); // ctime not available via std::filesystem
+                jsEngine_->setProperty(obj, "birthtime", jsEngine_->newNumber(mtimeMs));
+
+                return obj;
+            })
+        );
+
+        // ------------------------------------------------------------------
+        // __fsRename(oldPath, newPath) -> bool
+        // ------------------------------------------------------------------
+        jsEngine_->setGlobalProperty("__fsRename",
+            jsEngine_->newFunction("__fsRename", [this](void* ctx, const std::vector<js::JSValueHandle>& args) {
+                if (args.size() < 2) return jsEngine_->newBoolean(false);
+                std::string oldPath = jsEngine_->toString(args[0]);
+                std::string newPath = jsEngine_->toString(args[1]);
+                std::error_code ec;
+                std::filesystem::rename(oldPath, newPath, ec);
+                return jsEngine_->newBoolean(!ec);
+            })
+        );
+
+        // ------------------------------------------------------------------
+        // __fsCopyFile(src, dest) -> bool
+        // ------------------------------------------------------------------
+        jsEngine_->setGlobalProperty("__fsCopyFile",
+            jsEngine_->newFunction("__fsCopyFile", [this](void* ctx, const std::vector<js::JSValueHandle>& args) {
+                if (args.size() < 2) return jsEngine_->newBoolean(false);
+                std::string src = jsEngine_->toString(args[0]);
+                std::string dest = jsEngine_->toString(args[1]);
+                std::error_code ec;
+                std::filesystem::copy_file(src, dest, std::filesystem::copy_options::overwrite_existing, ec);
+                return jsEngine_->newBoolean(!ec);
+            })
+        );
+
+        // ------------------------------------------------------------------
+        // __fsCwd() -> string
+        // ------------------------------------------------------------------
+        jsEngine_->setGlobalProperty("__fsCwd",
+            jsEngine_->newFunction("__fsCwd", [this](void* ctx, const std::vector<js::JSValueHandle>& args) {
+                return jsEngine_->newString(std::filesystem::current_path().generic_string().c_str());
+            })
+        );
+
+        // ==================================================================
+        // Path utilities — all synchronous, no I/O
+        // ==================================================================
+
+        // Platform separator
+#ifdef _WIN32
+        jsEngine_->setGlobalProperty("__pathSep", jsEngine_->newString("\\"));
+        jsEngine_->setGlobalProperty("__pathDelimiter", jsEngine_->newString(";"));
+#else
+        jsEngine_->setGlobalProperty("__pathSep", jsEngine_->newString("/"));
+        jsEngine_->setGlobalProperty("__pathDelimiter", jsEngine_->newString(":"));
+#endif
+
+        // __pathJoin(...args) -> string
+        jsEngine_->setGlobalProperty("__pathJoin",
+            jsEngine_->newFunction("__pathJoin", [this](void* ctx, const std::vector<js::JSValueHandle>& args) {
+                std::filesystem::path result;
+                for (size_t i = 0; i < args.size(); i++) {
+                    std::string part = jsEngine_->toString(args[i]);
+                    if (part.empty()) continue;
+                    if (result.empty()) result = part;
+                    else result /= part;
+                }
+                return jsEngine_->newString(result.generic_string().c_str());
+            })
+        );
+
+        // __pathResolve(...args) -> string (absolute)
+        jsEngine_->setGlobalProperty("__pathResolve",
+            jsEngine_->newFunction("__pathResolve", [this](void* ctx, const std::vector<js::JSValueHandle>& args) {
+                std::filesystem::path result = std::filesystem::current_path();
+                for (size_t i = 0; i < args.size(); i++) {
+                    std::string part = jsEngine_->toString(args[i]);
+                    if (part.empty()) continue;
+                    std::filesystem::path p(part);
+                    if (p.is_absolute()) {
+                        result = p;
+                    } else {
+                        result /= p;
+                    }
+                }
+                std::error_code ec;
+                auto canonical = std::filesystem::weakly_canonical(result, ec);
+                if (!ec) result = canonical;
+                return jsEngine_->newString(result.generic_string().c_str());
+            })
+        );
+
+        // __pathDirname(path) -> string
+        jsEngine_->setGlobalProperty("__pathDirname",
+            jsEngine_->newFunction("__pathDirname", [this](void* ctx, const std::vector<js::JSValueHandle>& args) {
+                if (args.empty()) return jsEngine_->newString(".");
+                std::string pathStr = jsEngine_->toString(args[0]);
+                auto parent = std::filesystem::path(pathStr).parent_path();
+                std::string result = parent.empty() ? "." : parent.generic_string();
+                return jsEngine_->newString(result.c_str());
+            })
+        );
+
+        // __pathBasename(path, ext) -> string
+        jsEngine_->setGlobalProperty("__pathBasename",
+            jsEngine_->newFunction("__pathBasename", [this](void* ctx, const std::vector<js::JSValueHandle>& args) {
+                if (args.empty()) return jsEngine_->newString("");
+                std::string pathStr = jsEngine_->toString(args[0]);
+                std::string filename = std::filesystem::path(pathStr).filename().generic_string();
+                if (args.size() > 1 && !jsEngine_->isUndefined(args[1])) {
+                    std::string ext = jsEngine_->toString(args[1]);
+                    if (filename.size() >= ext.size() &&
+                        filename.compare(filename.size() - ext.size(), ext.size(), ext) == 0) {
+                        filename = filename.substr(0, filename.size() - ext.size());
+                    }
+                }
+                return jsEngine_->newString(filename.c_str());
+            })
+        );
+
+        // __pathExtname(path) -> string
+        jsEngine_->setGlobalProperty("__pathExtname",
+            jsEngine_->newFunction("__pathExtname", [this](void* ctx, const std::vector<js::JSValueHandle>& args) {
+                if (args.empty()) return jsEngine_->newString("");
+                std::string pathStr = jsEngine_->toString(args[0]);
+                return jsEngine_->newString(std::filesystem::path(pathStr).extension().generic_string().c_str());
+            })
+        );
+
+        // __pathNormalize(path) -> string
+        jsEngine_->setGlobalProperty("__pathNormalize",
+            jsEngine_->newFunction("__pathNormalize", [this](void* ctx, const std::vector<js::JSValueHandle>& args) {
+                if (args.empty()) return jsEngine_->newString(".");
+                std::string pathStr = jsEngine_->toString(args[0]);
+                auto p = std::filesystem::path(pathStr).lexically_normal();
+                return jsEngine_->newString(p.generic_string().c_str());
+            })
+        );
+
+        // __pathIsAbsolute(path) -> bool
+        jsEngine_->setGlobalProperty("__pathIsAbsolute",
+            jsEngine_->newFunction("__pathIsAbsolute", [this](void* ctx, const std::vector<js::JSValueHandle>& args) {
+                if (args.empty()) return jsEngine_->newBoolean(false);
+                std::string pathStr = jsEngine_->toString(args[0]);
+                return jsEngine_->newBoolean(std::filesystem::path(pathStr).is_absolute());
+            })
+        );
+
+        // __pathRelative(from, to) -> string
+        jsEngine_->setGlobalProperty("__pathRelative",
+            jsEngine_->newFunction("__pathRelative", [this](void* ctx, const std::vector<js::JSValueHandle>& args) {
+                if (args.size() < 2) return jsEngine_->newString("");
+                std::string fromStr = jsEngine_->toString(args[0]);
+                std::string toStr = jsEngine_->toString(args[1]);
+                auto rel = std::filesystem::path(toStr).lexically_relative(fromStr);
+                return jsEngine_->newString(rel.generic_string().c_str());
+            })
+        );
+
+        // __pathParse(path) -> {root, dir, base, ext, name}
+        jsEngine_->setGlobalProperty("__pathParse",
+            jsEngine_->newFunction("__pathParse", [this](void* ctx, const std::vector<js::JSValueHandle>& args) {
+                if (args.empty()) {
+                    auto obj = jsEngine_->newObject();
+                    jsEngine_->setProperty(obj, "root", jsEngine_->newString(""));
+                    jsEngine_->setProperty(obj, "dir", jsEngine_->newString(""));
+                    jsEngine_->setProperty(obj, "base", jsEngine_->newString(""));
+                    jsEngine_->setProperty(obj, "ext", jsEngine_->newString(""));
+                    jsEngine_->setProperty(obj, "name", jsEngine_->newString(""));
+                    return obj;
+                }
+                std::string pathStr = jsEngine_->toString(args[0]);
+                std::filesystem::path p(pathStr);
+                auto obj = jsEngine_->newObject();
+                jsEngine_->setProperty(obj, "root", jsEngine_->newString(p.root_path().generic_string().c_str()));
+                jsEngine_->setProperty(obj, "dir", jsEngine_->newString(p.parent_path().generic_string().c_str()));
+                jsEngine_->setProperty(obj, "base", jsEngine_->newString(p.filename().generic_string().c_str()));
+                jsEngine_->setProperty(obj, "ext", jsEngine_->newString(p.extension().generic_string().c_str()));
+                jsEngine_->setProperty(obj, "name", jsEngine_->newString(p.stem().generic_string().c_str()));
+                return obj;
+            })
+        );
+
+        // __pathFormat({root, dir, base, ext, name}) -> string
+        jsEngine_->setGlobalProperty("__pathFormat",
+            jsEngine_->newFunction("__pathFormat", [this](void* ctx, const std::vector<js::JSValueHandle>& args) {
+                if (args.empty()) return jsEngine_->newString("");
+                auto obj = args[0];
+                std::string dir, base, ext, name, root;
+
+                auto dirVal = jsEngine_->getProperty(obj, "dir");
+                if (!jsEngine_->isUndefined(dirVal)) dir = jsEngine_->toString(dirVal);
+
+                auto rootVal = jsEngine_->getProperty(obj, "root");
+                if (!jsEngine_->isUndefined(rootVal)) root = jsEngine_->toString(rootVal);
+
+                auto baseVal = jsEngine_->getProperty(obj, "base");
+                if (!jsEngine_->isUndefined(baseVal)) base = jsEngine_->toString(baseVal);
+
+                auto nameVal = jsEngine_->getProperty(obj, "name");
+                if (!jsEngine_->isUndefined(nameVal)) name = jsEngine_->toString(nameVal);
+
+                auto extVal = jsEngine_->getProperty(obj, "ext");
+                if (!jsEngine_->isUndefined(extVal)) ext = jsEngine_->toString(extVal);
+
+                // Node.js path.format logic:
+                // If base is provided, use it; otherwise name + ext
+                if (base.empty() && !name.empty()) {
+                    base = name + ext;
+                }
+                // If dir is provided, use it; otherwise root
+                std::string result;
+                if (!dir.empty()) {
+                    result = dir + "/" + base;
+                } else if (!root.empty()) {
+                    result = root + base;
+                } else {
+                    result = base;
+                }
+                return jsEngine_->newString(result.c_str());
+            })
+        );
+
+        // ==================================================================
+        // JS polyfill: assemble globalThis.fs and globalThis.path
+        // ==================================================================
+        const char* fsPolyfill = R"JS(
+(function() {
+    // Helper: wrap a sync native call into a resolved/rejected Promise
+    function promisify(fn) {
+        return function() {
+            var args = arguments;
+            return new Promise(function(resolve, reject) {
+                try {
+                    var result = fn.apply(null, args);
+                    resolve(result);
+                } catch (e) {
+                    reject(e);
+                }
+            });
+        };
+    }
+
+    // Sentinel check for error strings from __fsReadFile
+    function checkError(val) {
+        if (typeof val === 'string' && val.charCodeAt(0) === 0xFF) {
+            throw new Error(val.substring(1));
+        }
+        return val;
+    }
+
+    // ---- fs object ----
+    globalThis.fs = {
+        readFile: function(path, encoding) {
+            return new Promise(function(resolve, reject) {
+                try {
+                    var result = __fsReadFile(path, encoding || 'utf-8');
+                    resolve(checkError(result));
+                } catch (e) { reject(e); }
+            });
+        },
+        readFileBuffer: function(path) {
+            return new Promise(function(resolve, reject) {
+                try {
+                    var result = __fsReadFile(path, null);
+                    resolve(checkError(result));
+                } catch (e) { reject(e); }
+            });
+        },
+        writeFile: function(path, content, encoding) {
+            return new Promise(function(resolve, reject) {
+                try {
+                    var ok = __fsWriteFile(path, content);
+                    if (!ok) reject(new Error("Failed to write file: " + path));
+                    else resolve();
+                } catch (e) { reject(e); }
+            });
+        },
+        writeFileBuffer: function(path, buffer) {
+            return new Promise(function(resolve, reject) {
+                try {
+                    var ok = __fsWriteFileBuffer(path, buffer);
+                    if (!ok) reject(new Error("Failed to write file: " + path));
+                    else resolve();
+                } catch (e) { reject(e); }
+            });
+        },
+        exists: function(path) {
+            return new Promise(function(resolve) {
+                resolve(__fsExists(path));
+            });
+        },
+        unlink: function(path) {
+            return new Promise(function(resolve, reject) {
+                try {
+                    var ok = __fsUnlink(path);
+                    if (!ok) reject(new Error("Failed to delete: " + path));
+                    else resolve();
+                } catch (e) { reject(e); }
+            });
+        },
+        mkdir: function(path, recursive) {
+            return new Promise(function(resolve, reject) {
+                try {
+                    __fsMkdir(path, !!recursive);
+                    resolve();
+                } catch (e) { reject(e); }
+            });
+        },
+        rmdir: function(path, recursive) {
+            return new Promise(function(resolve, reject) {
+                try {
+                    __fsRmdir(path, !!recursive);
+                    resolve();
+                } catch (e) { reject(e); }
+            });
+        },
+        readdir: function(path) {
+            return new Promise(function(resolve, reject) {
+                try {
+                    var result = __fsReaddir(path);
+                    if (result === null) reject(new Error("Failed to read directory: " + path));
+                    else resolve(result);
+                } catch (e) { reject(e); }
+            });
+        },
+        stat: function(path) {
+            return new Promise(function(resolve, reject) {
+                try {
+                    var result = __fsStat(path);
+                    if (result === null) reject(new Error("ENOENT: no such file or directory: " + path));
+                    else resolve(result);
+                } catch (e) { reject(e); }
+            });
+        },
+        rename: function(oldPath, newPath) {
+            return new Promise(function(resolve, reject) {
+                try {
+                    var ok = __fsRename(oldPath, newPath);
+                    if (!ok) reject(new Error("Failed to rename: " + oldPath));
+                    else resolve();
+                } catch (e) { reject(e); }
+            });
+        },
+        copyFile: function(src, dest) {
+            return new Promise(function(resolve, reject) {
+                try {
+                    var ok = __fsCopyFile(src, dest);
+                    if (!ok) reject(new Error("Failed to copy: " + src));
+                    else resolve();
+                } catch (e) { reject(e); }
+            });
+        },
+
+        // Synchronous versions
+        readFileSync: function(path, encoding) {
+            return checkError(__fsReadFile(path, encoding || 'utf-8'));
+        },
+        readFileBufferSync: function(path) {
+            return checkError(__fsReadFile(path, null));
+        },
+        writeFileSync: function(path, content, encoding) {
+            if (!__fsWriteFile(path, content)) throw new Error("Failed to write file: " + path);
+        },
+        writeFileBufferSync: function(path, buffer) {
+            if (!__fsWriteFileBuffer(path, buffer)) throw new Error("Failed to write file: " + path);
+        },
+        existsSync: function(path) { return __fsExists(path); },
+        unlinkSync: function(path) {
+            if (!__fsUnlink(path)) throw new Error("Failed to delete: " + path);
+        },
+        mkdirSync: function(path, recursive) { __fsMkdir(path, !!recursive); },
+        rmdirSync: function(path, recursive) { __fsRmdir(path, !!recursive); },
+        readdirSync: function(path) {
+            var result = __fsReaddir(path);
+            if (result === null) throw new Error("Failed to read directory: " + path);
+            return result;
+        },
+        statSync: function(path) {
+            var result = __fsStat(path);
+            if (result === null) throw new Error("ENOENT: " + path);
+            return result;
+        },
+        renameSync: function(oldPath, newPath) {
+            if (!__fsRename(oldPath, newPath)) throw new Error("Failed to rename: " + oldPath);
+        },
+        copyFileSync: function(src, dest) {
+            if (!__fsCopyFile(src, dest)) throw new Error("Failed to copy: " + src);
+        },
+        cwd: function() { return __fsCwd(); }
+    };
+
+    // ---- path object ----
+    globalThis.path = {
+        sep: __pathSep,
+        delimiter: __pathDelimiter,
+        join: function() {
+            var parts = [];
+            for (var i = 0; i < arguments.length; i++) parts.push(arguments[i]);
+            return __pathJoin.apply(null, parts);
+        },
+        resolve: function() {
+            var parts = [];
+            for (var i = 0; i < arguments.length; i++) parts.push(arguments[i]);
+            return __pathResolve.apply(null, parts);
+        },
+        dirname: function(p) { return __pathDirname(p); },
+        basename: function(p, ext) { return __pathBasename(p, ext); },
+        extname: function(p) { return __pathExtname(p); },
+        normalize: function(p) { return __pathNormalize(p); },
+        isAbsolute: function(p) { return __pathIsAbsolute(p); },
+        relative: function(from, to) { return __pathRelative(from, to); },
+        parse: function(p) { return __pathParse(p); },
+        format: function(obj) { return __pathFormat(obj); }
+    };
+})();
+)JS";
+
+        jsEngine_->eval(fsPolyfill, "fs-polyfill.js");
+        std::cout << "[Mystral] File system and path APIs initialized" << std::endl;
     }
 
     void setupURL() {
