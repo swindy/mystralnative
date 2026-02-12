@@ -2103,6 +2103,13 @@ globalThis.__mystralBake = __mystralBake;
 }
 
 int main(int argc, char* argv[]) {
+#ifdef _WIN32
+    // Set console codepage to UTF-8 so that std::cout/std::cerr correctly
+    // display multi-byte characters (Chinese, Japanese, etc.)
+    SetConsoleOutputCP(CP_UTF8);
+    SetConsoleCP(CP_UTF8);
+#endif
+
     CLIOptions opts = parseArgs(argc, argv);
     std::string embeddedEntry = mystral::vfs::getEmbeddedEntryPath();
 
