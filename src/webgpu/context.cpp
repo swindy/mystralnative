@@ -34,63 +34,9 @@ extern "C" int stbi_write_png(const char* filename, int w, int h, int comp, cons
 #endif
 #endif
 
-// wgpu-native specific declarations (avoiding wgpu.h include path issues)
+// wgpu-native specific extension header (includes WGPUInstanceExtras, wgpuDevicePoll, etc.)
 #if defined(MYSTRAL_WEBGPU_WGPU)
-extern "C" {
-// Log level enum
-typedef enum WGPULogLevel {
-    WGPULogLevel_Off = 0x00000000,
-    WGPULogLevel_Error = 0x00000001,
-    WGPULogLevel_Warn = 0x00000002,
-    WGPULogLevel_Info = 0x00000003,
-    WGPULogLevel_Debug = 0x00000004,
-    WGPULogLevel_Trace = 0x00000005,
-} WGPULogLevel;
-
-// Instance backend flags
-typedef enum WGPUInstanceBackend {
-    WGPUInstanceBackend_All = 0x00000000,
-    WGPUInstanceBackend_Vulkan = 1 << 0,
-    WGPUInstanceBackend_GL = 1 << 1,
-    WGPUInstanceBackend_Metal = 1 << 2,
-    WGPUInstanceBackend_DX12 = 1 << 3,
-    WGPUInstanceBackend_DX11 = 1 << 4,
-    WGPUInstanceBackend_BrowserWebGPU = 1 << 5,
-} WGPUInstanceBackend;
-
-typedef enum WGPUInstanceFlag {
-    WGPUInstanceFlag_Default = 0x00000000,
-    WGPUInstanceFlag_Debug = 1 << 0,
-    WGPUInstanceFlag_Validation = 1 << 1,
-} WGPUInstanceFlag;
-
-// Native sType for instance extras
-#define WGPUSType_InstanceExtras 0x00030006
-
-typedef struct WGPUInstanceExtras {
-    WGPUChainedStruct chain;
-    WGPUFlags backends;
-    WGPUFlags flags;
-    uint32_t dx12ShaderCompiler;
-    uint32_t gles3MinorVersion;
-    const char* dxilPath;
-    const char* dxcPath;
-} WGPUInstanceExtras;
-
-typedef void (*WGPULogCallback)(WGPULogLevel level, char const* message, void* userdata);
-
-// Wrapped submission index for device poll
-typedef struct WGPUWrappedSubmissionIndex {
-    WGPUQueue queue;
-    uint64_t submissionIndex;
-} WGPUWrappedSubmissionIndex;
-
-void wgpuSetLogCallback(WGPULogCallback callback, void* userdata);
-void wgpuSetLogLevel(WGPULogLevel level);
-
-// Device poll - blocks until all GPU work is done
-WGPUBool wgpuDevicePoll(WGPUDevice device, WGPUBool wait, WGPUWrappedSubmissionIndex const* wrappedSubmissionIndex);
-}
+#include "webgpu/wgpu.h"
 #endif
 
 namespace mystral {
@@ -185,7 +131,7 @@ static void onDeviceError(WGPUErrorType type, char const* message, void* userdat
 #endif
 
 #if defined(MYSTRAL_WEBGPU_WGPU)
-static void onWgpuLog(WGPULogLevel level, char const* message, void* userdata) {
+static void onWgpuLog(WGPULogLevel level, WGPUStringView message, void* userdata) {
     const char* levelStr = "???";
     switch (level) {
         case WGPULogLevel_Error: levelStr = "ERROR"; break;
@@ -195,7 +141,9 @@ static void onWgpuLog(WGPULogLevel level, char const* message, void* userdata) {
         case WGPULogLevel_Trace: levelStr = "TRACE"; break;
         default: break;
     }
-    std::cout << "[wgpu " << levelStr << "] " << (message ? message : "") << std::endl;
+    std::string msg = (message.data && message.length > 0)
+        ? std::string(message.data, message.length) : std::string();
+    std::cout << "[wgpu " << levelStr << "] " << msg << std::endl;
 }
 #endif
 
@@ -304,15 +252,10 @@ bool Context::initializeHeadless() {
     wgpuInstanceRequestAdapter(instance_, &adapterOptions, onAdapterRequestEnded, &adapterData);
 #endif
 
-#if defined(MYSTRAL_WEBGPU_WGPU)
+    // Both wgpu-native v25+ and Dawn support wgpuInstanceProcessEvents
     while (!adapterData.completed) {
         wgpuInstanceProcessEvents(instance_);
     }
-#elif defined(MYSTRAL_WEBGPU_DAWN)
-    while (!adapterData.completed) {
-        wgpuInstanceProcessEvents(instance_);
-    }
-#endif
 
     if (!adapterData.adapter) {
         std::cerr << "[WebGPU] Failed to get adapter in headless mode" << std::endl;
@@ -359,11 +302,10 @@ bool Context::initializeHeadless() {
     deviceDesc.requiredFeatureCount = featureCount;
     deviceDesc.requiredFeatures = featureCount > 0 ? requiredFeaturesDawn : nullptr;
 #elif defined(MYSTRAL_WEBGPU_WGPU)
-    WGPUSupportedLimits adapterLimits = {};
+    // v25+ uses WGPULimits directly (no WGPUSupportedLimits/WGPURequiredLimits wrappers)
+    WGPULimits adapterLimits = {};
     wgpuAdapterGetLimits(adapter_, &adapterLimits);
-    WGPURequiredLimits requiredLimits = {};
-    requiredLimits.limits = adapterLimits.limits;
-    deviceDesc.requiredLimits = &requiredLimits;
+    deviceDesc.requiredLimits = &adapterLimits;
 
     static WGPUFeatureName requiredFeaturesWGPU[1];
     size_t featureCount = 0;
@@ -393,15 +335,10 @@ bool Context::initializeHeadless() {
     wgpuAdapterRequestDevice(adapter_, &deviceDesc, onDeviceRequestEnded, &deviceData);
 #endif
 
-#if defined(MYSTRAL_WEBGPU_WGPU)
+    // Both wgpu-native v25+ and Dawn support wgpuInstanceProcessEvents
     while (!deviceData.completed) {
         wgpuInstanceProcessEvents(instance_);
     }
-#elif defined(MYSTRAL_WEBGPU_DAWN)
-    while (!deviceData.completed) {
-        wgpuInstanceProcessEvents(instance_);
-    }
-#endif
 
     if (!deviceData.device) {
         std::cerr << "[WebGPU] Failed to get device in headless mode" << std::endl;
@@ -561,17 +498,10 @@ bool Context::createSurface(void* nativeHandle, int platformType) {
     wgpuInstanceRequestAdapter(instance_, &adapterOptions, onAdapterRequestEnded, &adapterData);
 #endif
 
-    // wgpu-native is synchronous for requestAdapter, but we should poll just in case
-#if defined(MYSTRAL_WEBGPU_WGPU)
+    // Both wgpu-native v25+ and Dawn support wgpuInstanceProcessEvents
     while (!adapterData.completed) {
         wgpuInstanceProcessEvents(instance_);
     }
-#elif defined(MYSTRAL_WEBGPU_DAWN)
-    // Dawn also needs event processing
-    while (!adapterData.completed) {
-        wgpuInstanceProcessEvents(instance_);
-    }
-#endif
 
     if (!adapterData.adapter) {
         std::cerr << "[WebGPU] Failed to get adapter" << std::endl;
@@ -639,21 +569,18 @@ bool Context::createSurface(void* nativeHandle, int platformType) {
     deviceDesc.requiredFeatureCount = featureCount;
     deviceDesc.requiredFeatures = featureCount > 0 ? requiredFeaturesDawn : nullptr;
 #elif defined(MYSTRAL_WEBGPU_WGPU)
-    // wgpu-native uses WGPURequiredLimits wrapper
-    WGPUSupportedLimits adapterLimits = {};
+    // v25+ uses WGPULimits directly (no wrapper structs)
+    WGPULimits adapterLimits = {};
     wgpuAdapterGetLimits(adapter_, &adapterLimits);
 
     // Start with adapter limits as baseline
-    WGPURequiredLimits requiredLimits = {};
-    requiredLimits.limits = adapterLimits.limits;
-
     uint32_t neededBytesPerSample = 64;
-    if (adapterLimits.limits.maxColorAttachmentBytesPerSample >= neededBytesPerSample) {
-        requiredLimits.limits.maxColorAttachmentBytesPerSample = neededBytesPerSample;
+    if (adapterLimits.maxColorAttachmentBytesPerSample >= neededBytesPerSample) {
+        adapterLimits.maxColorAttachmentBytesPerSample = neededBytesPerSample;
         std::cout << "[WebGPU] Requesting maxColorAttachmentBytesPerSample: " << neededBytesPerSample << std::endl;
     }
 
-    deviceDesc.requiredLimits = &requiredLimits;
+    deviceDesc.requiredLimits = &adapterLimits;
 
     // Check if IndirectFirstInstance is supported before requesting it
     // This feature allows instance_index in shaders to include firstInstance offset
@@ -692,15 +619,10 @@ bool Context::createSurface(void* nativeHandle, int platformType) {
     wgpuAdapterRequestDevice(adapter_, &deviceDesc, onDeviceRequestEnded, &deviceData);
 #endif
 
-#if defined(MYSTRAL_WEBGPU_WGPU)
+    // Both wgpu-native v25+ and Dawn support wgpuInstanceProcessEvents
     while (!deviceData.completed) {
         wgpuInstanceProcessEvents(instance_);
     }
-#elif defined(MYSTRAL_WEBGPU_DAWN)
-    while (!deviceData.completed) {
-        wgpuInstanceProcessEvents(instance_);
-    }
-#endif
 
     if (!deviceData.device) {
         std::cerr << "[WebGPU] Failed to get device" << std::endl;
@@ -775,11 +697,10 @@ bool Context::createSurfaceWithDisplay(void* display, void* window, int platform
     wgpuInstanceRequestAdapter(instance_, &adapterOptions, onAdapterRequestEnded, &adapterData);
 #endif
 
-#if defined(MYSTRAL_WEBGPU_WGPU) || defined(MYSTRAL_WEBGPU_DAWN)
+    // Both wgpu-native v25+ and Dawn support wgpuInstanceProcessEvents
     while (!adapterData.completed) {
         wgpuInstanceProcessEvents(instance_);
     }
-#endif
 
     if (!adapterData.adapter) {
         std::cerr << "[WebGPU] Failed to get adapter" << std::endl;
@@ -831,15 +752,14 @@ bool Context::createSurfaceWithDisplay(void* display, void* window, int platform
     deviceDesc.requiredFeatureCount = featureCount;
     deviceDesc.requiredFeatures = featureCount > 0 ? requiredFeaturesDawn : nullptr;
 #elif defined(MYSTRAL_WEBGPU_WGPU)
-    WGPUSupportedLimits adapterLimits = {};
+    // v25+ uses WGPULimits directly (no wrapper structs)
+    WGPULimits adapterLimits = {};
     wgpuAdapterGetLimits(adapter_, &adapterLimits);
-    WGPURequiredLimits requiredLimits = {};
-    requiredLimits.limits = adapterLimits.limits;
     uint32_t neededBytesPerSample = 64;
-    if (adapterLimits.limits.maxColorAttachmentBytesPerSample >= neededBytesPerSample) {
-        requiredLimits.limits.maxColorAttachmentBytesPerSample = neededBytesPerSample;
+    if (adapterLimits.maxColorAttachmentBytesPerSample >= neededBytesPerSample) {
+        adapterLimits.maxColorAttachmentBytesPerSample = neededBytesPerSample;
     }
-    deviceDesc.requiredLimits = &requiredLimits;
+    deviceDesc.requiredLimits = &adapterLimits;
 
     static WGPUFeatureName requiredFeaturesWGPU[1];
     size_t featureCount = 0;
@@ -869,11 +789,10 @@ bool Context::createSurfaceWithDisplay(void* display, void* window, int platform
     wgpuAdapterRequestDevice(adapter_, &deviceDesc, onDeviceRequestEnded, &deviceData);
 #endif
 
-#if defined(MYSTRAL_WEBGPU_WGPU) || defined(MYSTRAL_WEBGPU_DAWN)
+    // Both wgpu-native v25+ and Dawn support wgpuInstanceProcessEvents
     while (!deviceData.completed) {
         wgpuInstanceProcessEvents(instance_);
     }
-#endif
 
     if (!deviceData.device) {
         std::cerr << "[WebGPU] Failed to get device" << std::endl;

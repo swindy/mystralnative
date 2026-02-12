@@ -12,7 +12,7 @@
  *   node scripts/download-deps.mjs --only skia-ios  # Download only iOS Skia
  *   node scripts/download-deps.mjs --force      # Re-download even if exists
  *
- * Desktop deps: wgpu, sdl3, dawn, v8, quickjs, stb, cgltf, webp, skia, swc
+ * Desktop deps: wgpu, sdl3, dawn, v8, quickjs, stb, cgltf, webp, skia, swc, curl, zlib
  * iOS deps: wgpu-ios, skia-ios (for cross-compilation from macOS)
  * Android deps: wgpu-android, sdl3-android
  */
@@ -50,7 +50,9 @@ console.log(`Platform: ${platformName}-${archName}`);
 // Dependency versions and URLs
 const DEPS = {
   wgpu: {
-    version: 'v22.1.0.5',
+    // v25.0.2.2: wgpuInstanceProcessEvents is now implemented (was unimplemented in v22)
+    // This avoids the need for MYSTRAL_WEBGPU_WGPU workarounds in context.cpp/bindings.cpp
+    version: 'v25.0.2.2',
     getUrl: () => {
       // wgpu-native releases: https://github.com/gfx-rs/wgpu-native/releases
       // Windows releases include toolchain suffix: wgpu-windows-x86_64-msvc-release.zip
@@ -66,7 +68,7 @@ const DEPS = {
   'wgpu-ios': {
     // wgpu-native iOS builds for cross-compilation from macOS
     // Downloads both device (arm64) and simulator (arm64 + x86_64) builds
-    version: 'v22.1.0.5',
+    version: 'v25.0.2.2',
     getUrl: () => {
       // This is a special multi-file download - handled separately
       return null;
@@ -74,9 +76,9 @@ const DEPS = {
     extractTo: 'wgpu-ios',
     // Individual archive URLs for iOS
     archives: {
-      device: `https://github.com/gfx-rs/wgpu-native/releases/download/v22.1.0.5/wgpu-ios-aarch64-release.zip`,
-      simulatorArm64: `https://github.com/gfx-rs/wgpu-native/releases/download/v22.1.0.5/wgpu-ios-aarch64-simulator-release.zip`,
-      simulatorX64: `https://github.com/gfx-rs/wgpu-native/releases/download/v22.1.0.5/wgpu-ios-x86_64-simulator-release.zip`,
+      device: `https://github.com/gfx-rs/wgpu-native/releases/download/v25.0.2.2/wgpu-ios-aarch64-release.zip`,
+      simulatorArm64: `https://github.com/gfx-rs/wgpu-native/releases/download/v25.0.2.2/wgpu-ios-aarch64-simulator-release.zip`,
+      simulatorX64: `https://github.com/gfx-rs/wgpu-native/releases/download/v25.0.2.2/wgpu-ios-x86_64-simulator-release.zip`,
     },
   },
   sdl3: {
@@ -343,20 +345,43 @@ const DEPS = {
     },
   },
   // ============================================================================
+  // HTTP Dependencies (libcurl + zlib)
+  // ============================================================================
+  curl: {
+    // libcurl - HTTP client library (required for desktop fetch())
+    // Source download - built from source with CMake to ensure CRT compatibility
+    // https://github.com/curl/curl/releases
+    version: '8.18.0',
+    getUrl: () => {
+      return `https://github.com/curl/curl/releases/download/curl-8_18_0/curl-8.18.0.tar.gz`;
+    },
+    extractTo: 'curl',
+  },
+  zlib: {
+    // zlib - compression library (required by libcurl)
+    // Source download - built from source with CMake
+    // https://github.com/madler/zlib/releases
+    version: '1.3.1',
+    getUrl: () => {
+      return `https://github.com/madler/zlib/releases/download/v1.3.1/zlib-1.3.1.tar.gz`;
+    },
+    extractTo: 'zlib',
+  },
+  // ============================================================================
   // Android Dependencies
   // ============================================================================
   'wgpu-android': {
     // wgpu-native Android builds for cross-compilation
     // Downloads aarch64 (ARM64) and x86_64 (emulator) builds
-    version: 'v22.1.0.5',
+    version: 'v25.0.2.2',
     getUrl: () => {
       // Multi-file download - handled separately
       return null;
     },
     extractTo: 'wgpu-android',
     archives: {
-      aarch64: `https://github.com/gfx-rs/wgpu-native/releases/download/v22.1.0.5/wgpu-android-aarch64-release.zip`,
-      x86_64: `https://github.com/gfx-rs/wgpu-native/releases/download/v22.1.0.5/wgpu-android-x86_64-release.zip`,
+      aarch64: `https://github.com/gfx-rs/wgpu-native/releases/download/v25.0.2.2/wgpu-android-aarch64-release.zip`,
+      x86_64: `https://github.com/gfx-rs/wgpu-native/releases/download/v25.0.2.2/wgpu-android-x86_64-release.zip`,
     },
   },
   'sdl3-android': {
@@ -686,7 +711,7 @@ async function main() {
   const onlyIndex = args.indexOf('--only');
 
   // Desktop deps (downloaded by default)
-  const desktopDeps = ['wgpu', 'sdl3', 'dawn', 'v8', 'quickjs', 'stb', 'cgltf', 'webp', 'skia', 'swc', 'libuv', 'draco'];
+  const desktopDeps = ['wgpu', 'sdl3', 'dawn', 'v8', 'quickjs', 'stb', 'cgltf', 'webp', 'skia', 'swc', 'libuv', 'draco', 'curl', 'zlib'];
 
   // iOS deps (only downloaded with --only or --ios)
   const iosDeps = ['wgpu-ios', 'skia-ios'];

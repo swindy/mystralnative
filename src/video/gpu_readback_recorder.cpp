@@ -23,6 +23,11 @@
 #include <thread>
 #include <mutex>
 #include <atomic>
+
+// wgpu-native specific extension header (wgpuDevicePoll, etc.)
+#if defined(MYSTRAL_WEBGPU_WGPU)
+#include "webgpu/wgpu.h"
+#endif
 #include <queue>
 #include <iostream>
 #include <fstream>
@@ -442,10 +447,15 @@ public:
 
         // Wait for any pending GPU work and process remaining buffers
         for (int i = 0; i < 100; i++) {
+#if defined(MYSTRAL_WEBGPU_DAWN)
             wgpuDeviceTick(device_);
             if (instance_) {
                 wgpuInstanceProcessEvents(instance_);
             }
+#elif defined(MYSTRAL_WEBGPU_WGPU)
+            // wgpu-native: use wgpuDevicePoll to flush GPU work
+            wgpuDevicePoll(device_, false, nullptr);
+#endif
             processPendingBuffers();
         }
 

@@ -20,87 +20,95 @@
 
 #if defined(MYSTRAL_WEBGPU_WGPU)
 // ============================================================================
-// wgpu-native uses the older WebGPU API naming
+// wgpu-native v25+ uses the same standard WebGPU API naming as Dawn
+// (v22 used older names; v25 adopted the unified webgpu.h standard header)
 // ============================================================================
 
 // Surface descriptors - macOS Metal
-typedef WGPUSurfaceDescriptorFromMetalLayer WGPUSurfaceDescriptorFromMetalLayer_Compat;
-#define WGPUSType_SurfaceDescriptorFromMetalLayer_Compat WGPUSType_SurfaceDescriptorFromMetalLayer
+typedef WGPUSurfaceSourceMetalLayer WGPUSurfaceDescriptorFromMetalLayer_Compat;
+#define WGPUSType_SurfaceDescriptorFromMetalLayer_Compat WGPUSType_SurfaceSourceMetalLayer
 
 // Surface descriptors - Windows HWND
-typedef WGPUSurfaceDescriptorFromWindowsHWND WGPUSurfaceDescriptorFromWindowsHWND_Compat;
-#define WGPUSType_SurfaceDescriptorFromWindowsHWND_Compat WGPUSType_SurfaceDescriptorFromWindowsHWND
+typedef WGPUSurfaceSourceWindowsHWND WGPUSurfaceDescriptorFromWindowsHWND_Compat;
+#define WGPUSType_SurfaceDescriptorFromWindowsHWND_Compat WGPUSType_SurfaceSourceWindowsHWND
 
 // Surface descriptors - Linux X11
-typedef WGPUSurfaceDescriptorFromXlibWindow WGPUSurfaceDescriptorFromXlibWindow_Compat;
-#define WGPUSType_SurfaceDescriptorFromXlibWindow_Compat WGPUSType_SurfaceDescriptorFromXlibWindow
+typedef WGPUSurfaceSourceXlibWindow WGPUSurfaceDescriptorFromXlibWindow_Compat;
+#define WGPUSType_SurfaceDescriptorFromXlibWindow_Compat WGPUSType_SurfaceSourceXlibWindow
 
 // Surface descriptors - Android ANativeWindow
-typedef WGPUSurfaceDescriptorFromAndroidNativeWindow WGPUSurfaceDescriptorFromAndroidNativeWindow_Compat;
-#define WGPUSType_SurfaceDescriptorFromAndroidNativeWindow_Compat WGPUSType_SurfaceDescriptorFromAndroidNativeWindow
+typedef WGPUSurfaceSourceAndroidNativeWindow WGPUSurfaceDescriptorFromAndroidNativeWindow_Compat;
+#define WGPUSType_SurfaceDescriptorFromAndroidNativeWindow_Compat WGPUSType_SurfaceSourceAndroidNativeWindow
 
 // Dawn proc initialization - not needed for wgpu-native
 #define WGPU_NEEDS_PROC_INIT 0
 
-// Texture copy types
-typedef WGPUImageCopyTexture WGPUImageCopyTexture_Compat;
-typedef WGPUImageCopyBuffer WGPUImageCopyBuffer_Compat;
-typedef WGPUTextureDataLayout WGPUTextureDataLayout_Compat;
+// Texture copy types (v25+ uses same Texel* naming as Dawn)
+typedef WGPUTexelCopyTextureInfo WGPUImageCopyTexture_Compat;
+typedef WGPUTexelCopyBufferInfo WGPUImageCopyBuffer_Compat;
+typedef WGPUTexelCopyBufferLayout WGPUTextureDataLayout_Compat;
 
-// Buffer mapping status
-typedef WGPUBufferMapAsyncStatus WGPUBufferMapAsyncStatus_Compat;
-#define WGPUBufferMapAsyncStatus_Success_Compat WGPUBufferMapAsyncStatus_Success
-#define WGPUBufferMapAsyncStatus_Unknown_Compat WGPUBufferMapAsyncStatus_Unknown
+// Buffer mapping status (v25+ uses WGPUMapAsyncStatus like Dawn)
+typedef WGPUMapAsyncStatus WGPUBufferMapAsyncStatus_Compat;
+#define WGPUBufferMapAsyncStatus_Success_Compat WGPUMapAsyncStatus_Success
+#define WGPUBufferMapAsyncStatus_Unknown_Compat WGPUMapAsyncStatus_Unknown
 
 // Surface texture status
 #define WGPU_SURFACE_TEXTURE_STATUS_TYPE WGPUSurfaceGetCurrentTextureStatus
-#define WGPUSurfaceGetCurrentTextureStatus_Success_Compat WGPUSurfaceGetCurrentTextureStatus_Success
+#define WGPUSurfaceGetCurrentTextureStatus_Success_Compat WGPUSurfaceGetCurrentTextureStatus_SuccessOptimal
 #define WGPUSurfaceGetCurrentTextureStatus_SuccessSuboptimal_Compat WGPUSurfaceGetCurrentTextureStatus_SuccessSuboptimal
 #define WGPUSurfaceGetCurrentTextureStatus_Error_Compat WGPUSurfaceGetCurrentTextureStatus_Error
 
-// Error types - wgpu-native has DeviceLost
-#define WGPUErrorType_DeviceLost_Compat WGPUErrorType_DeviceLost
+// Error types - v25 no longer has DeviceLost as an error type
+// (same as Dawn - don't define to avoid duplicate case in switch)
 
-// String handling - wgpu-native uses const char*
-#define WGPU_STRING_VIEW(str) (str)
-#define WGPU_STRING_VIEW_NULL nullptr
+// String views - v25+ wgpu-native uses WGPUStringView (same as Dawn)
+inline WGPUStringView WGPU_STRING_VIEW(const char* str) {
+    WGPUStringView sv;
+    sv.data = str;
+    sv.length = str ? strlen(str) : 0;
+    return sv;
+}
+#define WGPU_STRING_VIEW_NULL WGPUStringView{ nullptr, 0 }
 
-// For wgpu, just return the string directly (it's already const char*)
-#define WGPU_PRINT_STRING_VIEW(sv) ((sv) ? std::string(sv) : std::string("unknown"))
+// Helper to print WGPUStringView
+#define WGPU_PRINT_STRING_VIEW(sv) ((sv).data ? std::string((sv).data, (sv).length) : std::string("unknown"))
 
-// Shader module - wgpu uses WGSLDescriptor
-typedef WGPUShaderModuleWGSLDescriptor WGPUShaderModuleWGSLDescriptor_Compat;
-#define WGPUSType_ShaderModuleWGSLDescriptor_Compat WGPUSType_ShaderModuleWGSLDescriptor
+// Shader module - v25+ uses ShaderSourceWGSL (same as Dawn)
+typedef WGPUShaderSourceWGSL WGPUShaderModuleWGSLDescriptor_Compat;
+#define WGPUSType_ShaderModuleWGSLDescriptor_Compat WGPUSType_ShaderSourceWGSL
 
-// Shader module descriptor setup helper (wgpu uses WGSLDescriptor)
+// Shader module descriptor setup helper
 inline void setupShaderModuleWGSL(WGPUShaderModuleDescriptor* desc,
-                                  WGPUShaderModuleWGSLDescriptor* wgslDesc,
+                                  WGPUShaderSourceWGSL* wgslDesc,
                                   const char* code) {
     wgslDesc->chain.next = nullptr;
-    wgslDesc->chain.sType = WGPUSType_ShaderModuleWGSLDescriptor;
-    wgslDesc->code = code;
+    wgslDesc->chain.sType = WGPUSType_ShaderSourceWGSL;
+    wgslDesc->code = WGPU_STRING_VIEW(code);
     desc->nextInChain = &wgslDesc->chain;
-    desc->label = nullptr;
+    desc->label = WGPU_STRING_VIEW_NULL;
 }
 
-// wgpu-native uses simple callback (not CallbackInfo struct)
-#define WGPU_BUFFER_MAP_USES_CALLBACK_INFO 0
-#define WGPU_USES_CALLBACK_INFO_PATTERN 0
+// v25+ wgpu-native uses CallbackInfo structs (same as Dawn)
+#define WGPU_BUFFER_MAP_USES_CALLBACK_INFO 1
+#define WGPU_USES_CALLBACK_INFO_PATTERN 1
 
 // Copy command
 #define wgpuCommandEncoderCopyTextureToBuffer_Compat wgpuCommandEncoderCopyTextureToBuffer
 
-// Vertex/Fragment state uses const char* for entryPoint
-#define WGPU_SET_ENTRY_POINT(state, entry) (state).entryPoint = (entry)
+// Vertex/Fragment state uses WGPUStringView for entryPoint (same as Dawn)
+#define WGPU_SET_ENTRY_POINT(state, entry) (state).entryPoint = WGPU_STRING_VIEW(entry)
 
-// Label setting - wgpu uses const char*
-#define WGPU_SET_LABEL(desc, str) (desc).label = (str)
+// Label setting - v25+ uses WGPUStringView (same as Dawn)
+#define WGPU_SET_LABEL(desc, str) do { \
+    static const char* _label_str = str; \
+    (desc).label = WGPUStringView{ _label_str, strlen(_label_str) }; \
+} while(0)
 
-// WGPUOptionalBool - wgpu-native uses plain bool/WGPUBool instead
-// depthWriteEnabled is WGPUBool in wgpu-native (0 = false, 1 = true)
-#define WGPU_OPTIONAL_BOOL_TRUE 1
-#define WGPU_OPTIONAL_BOOL_FALSE 0
-#define WGPU_OPTIONAL_BOOL_UNDEFINED 1  // Default to true when undefined
+// WGPUOptionalBool - v25+ has this type (same as Dawn)
+#define WGPU_OPTIONAL_BOOL_TRUE WGPUOptionalBool_True
+#define WGPU_OPTIONAL_BOOL_FALSE WGPUOptionalBool_False
+#define WGPU_OPTIONAL_BOOL_UNDEFINED WGPUOptionalBool_Undefined
 
 #elif defined(MYSTRAL_WEBGPU_DAWN)
 // ============================================================================

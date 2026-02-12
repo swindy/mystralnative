@@ -67,14 +67,9 @@ static int g_nextOffscreenCanvasId = 0;
 #include "mystral/webgpu_compat.h"
 #endif
 
-// wgpu-native specific extension functions (not in standard webgpu.h)
+// wgpu-native specific extension header (wgpuDevicePoll, etc.)
 #if defined(MYSTRAL_WEBGPU_WGPU)
-extern "C" {
-// Device poll - blocks until GPU work is done
-// From wgpu/wgpu.h but declared here to avoid include path issues
-typedef struct WGPUWrappedSubmissionIndex WGPUWrappedSubmissionIndex;
-WGPUBool wgpuDevicePoll(WGPUDevice device, WGPUBool wait, WGPUWrappedSubmissionIndex const* wrappedSubmissionIndex);
-}
+#include "webgpu/wgpu.h"
 #endif
 
 namespace mystral {
@@ -1079,12 +1074,13 @@ bool initBindings(js::Engine* engine, void* wgpuInstance, void* wgpuDevice, void
                                 for (int syncIter = 0; syncIter < 100; syncIter++) {
 #if defined(MYSTRAL_WEBGPU_DAWN)
                                     wgpuDeviceTick(g_device);
-#elif defined(MYSTRAL_WEBGPU_WGPU)
-                                    wgpuDevicePoll(g_device, false, nullptr);
-#endif
                                     if (g_instance) {
                                         wgpuInstanceProcessEvents(g_instance);
                                     }
+#elif defined(MYSTRAL_WEBGPU_WGPU)
+                                    // wgpu-native: use wgpuDevicePoll to flush GPU work
+                                    wgpuDevicePoll(g_device, false, nullptr);
+#endif
                                 }
 
                                 g_screenshotReady = true;

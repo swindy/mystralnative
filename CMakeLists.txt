@@ -1207,11 +1207,139 @@ elseif(MYSTRAL_PLATFORM STREQUAL "android")
     add_compile_definitions(MYSTRAL_HTTP_ANDROID)
 else()
     # Desktop platforms use libcurl
-    find_package(CURL REQUIRED)
-    find_package(ZLIB REQUIRED)
-    target_link_libraries(mystral-runtime PUBLIC CURL::libcurl ZLIB::ZLIB)
-    message(STATUS "Found CURL: ${CURL_LIBRARIES}")
+    # Strategy: Try to find pre-installed curl/zlib first (e.g. vcpkg),
+    # then fall back to building from source in third_party/ if available.
+
+    # --- zlib ---
+    set(ZLIB_SOURCE_DIR "${THIRD_PARTY_DIR}/zlib")
+    file(GLOB ZLIB_SOURCE_DIRS "${ZLIB_SOURCE_DIR}/zlib-*")
+    list(LENGTH ZLIB_SOURCE_DIRS ZLIB_SOURCE_DIRS_LEN)
+    if(ZLIB_SOURCE_DIRS_LEN GREATER 0)
+        list(GET ZLIB_SOURCE_DIRS 0 ZLIB_SOURCE_SUBDIR)
+    else()
+        set(ZLIB_SOURCE_SUBDIR "")
+    endif()
+
+    find_package(ZLIB QUIET)
+    if(NOT ZLIB_FOUND AND EXISTS "${ZLIB_SOURCE_SUBDIR}/CMakeLists.txt")
+        message(STATUS "Building zlib from source: ${ZLIB_SOURCE_SUBDIR}")
+        set(ZLIB_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+        set(SKIP_INSTALL_ALL ON CACHE BOOL "" FORCE)
+        add_subdirectory("${ZLIB_SOURCE_SUBDIR}" "${CMAKE_BINARY_DIR}/zlib-build" EXCLUDE_FROM_ALL)
+
+        # zlib's CMakeLists.txt renames zconf.h -> zconf.h.included in source dir
+        # and generates a new zconf.h in the build dir. Copy it back to source dir
+        # so that consumers (e.g. curl) who include zlib.h from ZLIB_INCLUDE_DIR
+        # (= source dir) can find zconf.h next to it.
+        if(EXISTS "${CMAKE_BINARY_DIR}/zlib-build/zconf.h")
+            file(COPY "${CMAKE_BINARY_DIR}/zlib-build/zconf.h" DESTINATION "${ZLIB_SOURCE_SUBDIR}")
+        endif()
+
+        # Force zlibstatic output to a predictable path (no per-config subdirectory)
+        # so that curl's find_package(ZLIB) can locate it via cache variables.
+        set_target_properties(zlibstatic PROPERTIES
+            ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/zlib-lib"
+            ARCHIVE_OUTPUT_DIRECTORY_DEBUG "${CMAKE_BINARY_DIR}/zlib-lib"
+            ARCHIVE_OUTPUT_DIRECTORY_RELEASE "${CMAKE_BINARY_DIR}/zlib-lib"
+            ARCHIVE_OUTPUT_DIRECTORY_RELWITHDEBINFO "${CMAKE_BINARY_DIR}/zlib-lib"
+            ARCHIVE_OUTPUT_DIRECTORY_MINSIZEREL "${CMAKE_BINARY_DIR}/zlib-lib"
+        )
+
+        # Ensure zlib includes are propagated
+        target_include_directories(zlibstatic PUBLIC
+            "${ZLIB_SOURCE_SUBDIR}"
+            "${CMAKE_BINARY_DIR}/zlib-build"
+        )
+
+        # Determine the output library filename
+        if(WIN32)
+            set(_ZLIB_STATIC_NAME "zlibstatic.lib")
+        else()
+            set(_ZLIB_STATIC_NAME "libz.a")
+        endif()
+
+        # Pre-populate CMake CACHE variables that FindZLIB.cmake uses.
+        # This is critical: when curl calls find_package(ZLIB), FindZLIB uses
+        # find_library() which respects pre-set cache values without checking
+        # file existence, so this works even though the lib is not yet built.
+        set(ZLIB_INCLUDE_DIR "${ZLIB_SOURCE_SUBDIR}" CACHE PATH "zlib include dir" FORCE)
+        set(ZLIB_LIBRARY "${CMAKE_BINARY_DIR}/zlib-lib/${_ZLIB_STATIC_NAME}" CACHE FILEPATH "zlib library" FORCE)
+        set(ZLIB_LIBRARY_RELEASE "${CMAKE_BINARY_DIR}/zlib-lib/${_ZLIB_STATIC_NAME}" CACHE FILEPATH "zlib release library" FORCE)
+
+        set(ZLIB_FOUND TRUE)
+        set(ZLIB_INCLUDE_DIRS "${ZLIB_SOURCE_SUBDIR}" "${CMAKE_BINARY_DIR}/zlib-build")
+        set(ZLIB_LIBRARIES zlibstatic)
+
+        # Create ZLIB::ZLIB as an IMPORTED target (not ALIAS, because curl's
+        # CMakeLists.txt calls set_target_properties on it which fails on ALIAS).
+        if(NOT TARGET ZLIB::ZLIB)
+            add_library(ZLIB::ZLIB IMPORTED STATIC)
+            set_target_properties(ZLIB::ZLIB PROPERTIES
+                IMPORTED_LOCATION "${CMAKE_BINARY_DIR}/zlib-lib/${_ZLIB_STATIC_NAME}"
+                INTERFACE_INCLUDE_DIRECTORIES "${ZLIB_SOURCE_SUBDIR};${CMAKE_BINARY_DIR}/zlib-build"
+            )
+            add_dependencies(ZLIB::ZLIB zlibstatic)
+        endif()
+    elseif(NOT ZLIB_FOUND)
+        find_package(ZLIB REQUIRED)
+    endif()
     message(STATUS "Found ZLIB: ${ZLIB_LIBRARIES}")
+
+    # --- curl ---
+    set(CURL_SOURCE_DIR "${THIRD_PARTY_DIR}/curl")
+    file(GLOB CURL_SOURCE_DIRS "${CURL_SOURCE_DIR}/curl-*")
+    list(LENGTH CURL_SOURCE_DIRS CURL_SOURCE_DIRS_LEN)
+    if(CURL_SOURCE_DIRS_LEN GREATER 0)
+        list(GET CURL_SOURCE_DIRS 0 CURL_SOURCE_SUBDIR)
+    else()
+        set(CURL_SOURCE_SUBDIR "")
+    endif()
+
+    find_package(CURL QUIET)
+    if(NOT CURL_FOUND AND EXISTS "${CURL_SOURCE_SUBDIR}/CMakeLists.txt")
+        message(STATUS "Building libcurl from source: ${CURL_SOURCE_SUBDIR}")
+        # Configure curl build options for minimal static library
+        set(BUILD_CURL_EXE OFF CACHE BOOL "" FORCE)
+        set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+        set(BUILD_TESTING OFF CACHE BOOL "" FORCE)
+        set(CURL_DISABLE_LDAP ON CACHE BOOL "" FORCE)
+        set(CURL_DISABLE_LDAPS ON CACHE BOOL "" FORCE)
+        set(CURL_DISABLE_TELNET ON CACHE BOOL "" FORCE)
+        set(CURL_DISABLE_DICT ON CACHE BOOL "" FORCE)
+        set(CURL_DISABLE_TFTP ON CACHE BOOL "" FORCE)
+        set(CURL_DISABLE_POP3 ON CACHE BOOL "" FORCE)
+        set(CURL_DISABLE_IMAP ON CACHE BOOL "" FORCE)
+        set(CURL_DISABLE_SMTP ON CACHE BOOL "" FORCE)
+        set(CURL_DISABLE_GOPHER ON CACHE BOOL "" FORCE)
+        set(CURL_DISABLE_RTSP ON CACHE BOOL "" FORCE)
+        set(CURL_DISABLE_MQTT ON CACHE BOOL "" FORCE)
+        set(CURL_USE_LIBSSH2 OFF CACHE BOOL "" FORCE)
+        set(CURL_USE_LIBPSL OFF CACHE BOOL "" FORCE)
+        set(USE_LIBIDN2 OFF CACHE BOOL "" FORCE)
+        set(CURL_USE_OPENSSL OFF CACHE BOOL "" FORCE)
+        # Use OS-native TLS: Schannel (Windows), SecureTransport (macOS), OpenSSL (Linux)
+        if(WIN32)
+            set(CURL_USE_SCHANNEL ON CACHE BOOL "" FORCE)
+        elseif(APPLE)
+            set(CURL_USE_SECTRANSP ON CACHE BOOL "" FORCE)
+        else()
+            set(CURL_USE_OPENSSL ON CACHE BOOL "" FORCE)
+        endif()
+        # Provide zlib to curl — cache variables already set above for FindZLIB
+        set(CURL_ZLIB ON CACHE BOOL "" FORCE)
+        add_subdirectory("${CURL_SOURCE_SUBDIR}" "${CMAKE_BINARY_DIR}/curl-build" EXCLUDE_FROM_ALL)
+        # Create CURL::libcurl target alias (curl already links to ZLIB::ZLIB internally)
+        if(NOT TARGET CURL::libcurl)
+            add_library(CURL::libcurl ALIAS libcurl_static)
+        endif()
+        set(CURL_FOUND TRUE)
+        set(CURL_LIBRARIES libcurl_static)
+    elseif(NOT CURL_FOUND)
+        find_package(CURL REQUIRED)
+    endif()
+    message(STATUS "Found CURL: ${CURL_LIBRARIES}")
+
+    target_link_libraries(mystral-runtime PUBLIC CURL::libcurl ZLIB::ZLIB)
 endif()
 
 # libwebp linkage (optional - for WebP texture support and video recording)
